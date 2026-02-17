@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">Audio Summarizer</string>
+
+    <!-- Idle screen -->
+    <string name="idle_instructions">Share an audio file (e.g. a WhatsApp voice message) to transcribe and summarize it locally on your device.</string>
+
+    <!-- Processing steps -->
+    <string name="processing_title">Processing…</string>
+    <string name="step_copying">Copying file</string>
+    <string name="step_converting">Converting to WAV</string>
+    <string name="step_transcribing">Transcribing audio</string>
+    <string name="step_summarizing">Generating summary</string>
+
+    <!-- Results -->
+    <string name="transcription_title">Transcription</string>
+    <string name="summary_title">Summary</string>
+
+    <!-- Model setup -->
+    <string name="model_setup_title">Model Setup Required</string>
+    <string name="model_setup_description">This app requires AI models to transcribe and summarize audio. Download or import the required models to continue.</string>
+    <string name="download_model_button">Download Models</string>
+    <string name="downloading_model">Downloading %1$s…</string>
+
+    <!-- Error -->
+    <string name="error_title">Error</string>
+    <string name="error_step">Failed at step: %1$s</string>
+    <string name="retry_button">Retry</string>
+</resources>

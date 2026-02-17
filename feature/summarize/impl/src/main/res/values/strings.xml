@@ -1,0 +1,53 @@
+<resources>
+    <string name="screen_title">Local Audio Summarizer</string>
+    <string name="settings">Settings</string>
+
+    <string name="models_title">Model availability</string>
+    <string name="model_setup_required">Model setup required</string>
+    <string name="open_settings">Open settings</string>
+    <string name="whisper_model">Whisper</string>
+    <string name="llm_model">Summarizer (LLM)</string>
+    <string name="models_hint">Models run offline on your device. If a model is missing, import a local file or download it from HuggingFace.</string>
+    <string name="model_missing">Missing</string>
+    <string name="model_ready">Ready</string>
+    <string name="import_model">Import model</string>
+    <string name="import_whisper_model">Import Whisper model</string>
+    <string name="import_llm_model">Import LLM model (.gguf)</string>
+    <string name="download_from_huggingface">Download from HuggingFace</string>
+    <string name="cancel_download">Cancel download</string>
+    <string name="download_warning_any_network">Downloads can be large and may use cellular data.</string>
+    <string name="download_whisper_title">Download Whisper models</string>
+    <string name="download_llm_title">Download LLM models</string>
+    <string name="download">Download</string>
+    <string name="close">Close</string>
+
+    <string name="quality_title">Quality vs speed</string>
+    <string name="preset_fast">Fast</string>
+    <string name="preset_balanced">Balanced</string>
+    <string name="preset_quality">Quality</string>
+    <string name="preset_custom">Custom</string>
+    <string name="show">Show</string>
+    <string name="hide">Hide</string>
+    <string name="whisper_base">Base</string>
+    <string name="whisper_small">Small</string>
+    <string name="segment_target">Target segment speech</string>
+    <string name="segment_overlap">Segment overlap</string>
+    <string name="map_every">Map every segments</string>
+    <string name="idle_title">Share a voice message to start</string>
+    <string name="idle_description">Use Android share from WhatsApp (or any app) to process audio offline on device.</string>
+    <string name="pick_audio_file">Pick audio file</string>
+    <string name="history_title">Recent sessions</string>
+    <string name="unknown_source">Unknown audio source</string>
+    <string name="summary_title">Summary</string>
+    <string name="summary_missing">Summary not available.</string>
+    <string name="live_summary_title">Live summary so far</string>
+    <string name="transcript_title">Transcription</string>
+    <string name="copy_summary">Copy summary</string>
+    <string name="copy_transcript">Copy transcript</string>
+    <string name="share_summary">Share summary</string>
+    <string name="copied">Copied</string>
+    <string name="retry">Retry</string>
+    <string name="cancel">Cancel</string>
+    <string name="dismiss">Dismiss</string>
+    <string name="error_unknown">An unknown error occurred.</string>
+</resources>
