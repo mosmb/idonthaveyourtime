@@ -15,8 +15,12 @@ import io.morgan.idonthaveyourtime.core.model.Summary
 import io.morgan.idonthaveyourtime.core.model.Transcript
 import io.morgan.idonthaveyourtime.core.model.TranscriptSegment
 import javax.inject.Inject
+import kotlinx.coroutines.async
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class ProcessSessionUseCase @Inject constructor(
@@ -38,7 +42,7 @@ class ProcessSessionUseCase @Inject constructor(
         Result.failure(throwable)
     }
 
-    private suspend fun process(sessionId: String) {
+    private suspend fun process(sessionId: String) = coroutineScope {
         val inputFilePath = sessionRepository.getInputFilePath(sessionId)
             ?: throw ProcessingException("MISSING_INPUT", "Session input file not found")
 
@@ -74,6 +78,25 @@ class ProcessSessionUseCase @Inject constructor(
                     cause = throwable,
                 )
             }
+
+        val summaryUpdates = Channel<String>(Channel.CONFLATED)
+        val summaryPersistJob = launch {
+            for (summaryText in summaryUpdates) {
+                sessionRepository.setSummaryPartial(
+                    sessionId = sessionId,
+                    summaryText = summaryText,
+                ).getOrElse { throwable ->
+                    throw ProcessingException(
+                        code = "SUMMARY_PARTIAL_FAILED",
+                        message = throwable.message ?: "Unable to persist partial summary",
+                        cause = throwable,
+                    )
+                }
+            }
+        }
+        val summarizerPrewarm = async {
+            summarizationRepository.prewarm()
+        }
 
         sessionRepository.updateStage(
             sessionId = sessionId,
@@ -246,6 +269,15 @@ class ProcessSessionUseCase @Inject constructor(
             val bullets = summarizationRepository.mapChunk(
                 transcriptChunk = text,
                 languageCode = detectedLanguageCode,
+                onPartialResult = { partial ->
+                    val liveBullets = buildLiveSummaryText(
+                        completedChunks = chunkBullets,
+                        inFlightPartial = partial,
+                    )
+                    if (liveBullets.isNotBlank()) {
+                        summaryUpdates.trySend(liveBullets)
+                    }
+                },
             ).getOrElse { throwable ->
                 throw ProcessingException(
                     code = "SUMMARY_MAP_FAILED",
@@ -272,16 +304,9 @@ class ProcessSessionUseCase @Inject constructor(
 
             if (bullets.isNotBlank()) {
                 chunkBullets += bullets
-                val liveBullets = chunkBullets.joinToString(separator = "\n\n") { it.trim() }.trim()
-                sessionRepository.setSummaryPartial(
-                    sessionId = sessionId,
-                    summaryText = liveBullets,
-                ).getOrElse { throwable ->
-                    throw ProcessingException(
-                        code = "SUMMARY_PARTIAL_FAILED",
-                        message = throwable.message ?: "Unable to persist partial summary",
-                        cause = throwable,
-                    )
+                val liveBullets = buildLiveSummaryText(completedChunks = chunkBullets)
+                if (liveBullets.isNotBlank()) {
+                    summaryUpdates.trySend(liveBullets)
                 }
             }
 
@@ -329,9 +354,17 @@ class ProcessSessionUseCase @Inject constructor(
             progress = 0.85f,
         )
 
+        summarizerPrewarm.await()
+
         val summary = summarizationRepository.reduce(
             chunkBulletSummaries = chunkBullets.toList(),
             languageCode = detectedLanguageCode,
+            onPartialResult = { partial ->
+                val liveSummary = partial.trim()
+                if (liveSummary.isNotBlank()) {
+                    summaryUpdates.trySend(liveSummary)
+                }
+            },
         ).getOrElse { throwable ->
             throw ProcessingException(
                 code = "SUMMARY_REDUCE_FAILED",
@@ -351,6 +384,9 @@ class ProcessSessionUseCase @Inject constructor(
             languageCode = detectedLanguageCode,
         )
 
+        summaryUpdates.close()
+        summaryPersistJob.join()
+
         sessionRepository.setSuccess(sessionId, finalTranscript, summary)
             .getOrElse { throwable ->
                 throw ProcessingException(
@@ -359,5 +395,26 @@ class ProcessSessionUseCase @Inject constructor(
                     cause = throwable,
                 )
             }
+    }
+
+    private fun buildLiveSummaryText(
+        completedChunks: List<String>,
+        inFlightPartial: String? = null,
+    ): String {
+        val completed = completedChunks
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+
+        val partial = inFlightPartial
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+
+        return buildList {
+            addAll(completed)
+            if (partial != null) {
+                add(partial)
+            }
+        }.joinToString(separator = "\n\n")
+            .trim()
     }
 }

@@ -213,6 +213,50 @@ class ProcessSessionUseCaseTest {
         assertThat(repository.chunkSummaries.value).hasSize(3)
     }
 
+    @Test
+    fun `invoke emits progressive summary updates from in-flight callbacks`() = runTest {
+        val repository = InMemorySessionRepository()
+        repository.createSession(
+            session = ProcessingSession(
+                id = SESSION_ID,
+                createdAtEpochMs = 1L,
+                sourceName = "voice.ogg",
+                mimeType = "audio/ogg",
+                durationMs = null,
+                stage = ProcessingStage.Queued,
+                progress = 0f,
+                transcript = null,
+                summary = null,
+                languageCode = null,
+                errorCode = null,
+                errorMessage = null,
+            ),
+            inputFilePath = "/tmp/import.ogg",
+        ).getOrThrow()
+
+        val useCase = ProcessSessionUseCase(
+            sessionRepository = repository,
+            audioProcessingRepository = FakeAudioProcessingRepository(
+                durationMs = 2_000L,
+                segments = listOf(AudioSegment(startMs = 0L, endMs = 2_000L)),
+            ),
+            processingConfigRepository = FakeProcessingConfigRepository(),
+            transcriptionRepository = FixedTranscriptionRepository(
+                transcript = Transcript(text = "Transcribed text", languageCode = "en"),
+            ),
+            summarizationRepository = StreamingSummarizationRepository(),
+        )
+
+        val result = useCase(SESSION_ID)
+
+        assertThat(result.isSuccess).isTrue()
+        assertThat(repository.partialSummaries).containsAtLeast(
+            "- final map",
+            "Title: partial reduce",
+        )
+        assertThat(repository.getSession(SESSION_ID)?.summary).isEqualTo("FINAL SUMMARY")
+    }
+
     private class FakeAudioProcessingRepository(
         private val durationMs: Long = 2_000L,
         private val segments: List<AudioSegment>,
@@ -290,10 +334,20 @@ class ProcessSessionUseCaseTest {
         private val mapResult: String,
         private val reduceResult: Summary,
     ) : SummarizationRepository {
-        override suspend fun mapChunk(transcriptChunk: String, languageCode: String?): Result<String> =
+        override suspend fun prewarm(): Result<Unit> = Result.success(Unit)
+
+        override suspend fun mapChunk(
+            transcriptChunk: String,
+            languageCode: String?,
+            onPartialResult: (String) -> Unit,
+        ): Result<String> =
             Result.success(mapResult)
 
-        override suspend fun reduce(chunkBulletSummaries: List<String>, languageCode: String?): Result<Summary> =
+        override suspend fun reduce(
+            chunkBulletSummaries: List<String>,
+            languageCode: String?,
+            onPartialResult: (String) -> Unit,
+        ): Result<Summary> =
             Result.success(reduceResult)
     }
 
@@ -301,21 +355,63 @@ class ProcessSessionUseCaseTest {
         var mapCalls = 0
             private set
 
-        override suspend fun mapChunk(transcriptChunk: String, languageCode: String?): Result<String> {
+        override suspend fun prewarm(): Result<Unit> = Result.success(Unit)
+
+        override suspend fun mapChunk(
+            transcriptChunk: String,
+            languageCode: String?,
+            onPartialResult: (String) -> Unit,
+        ): Result<String> {
             mapCalls += 1
             return Result.success("- Map $mapCalls")
         }
 
-        override suspend fun reduce(chunkBulletSummaries: List<String>, languageCode: String?): Result<Summary> =
+        override suspend fun reduce(
+            chunkBulletSummaries: List<String>,
+            languageCode: String?,
+            onPartialResult: (String) -> Unit,
+        ): Result<Summary> =
             Result.success(Summary(text = "FINAL SUMMARY"))
     }
 
     private class ReduceFailingSummarizationRepository : SummarizationRepository {
-        override suspend fun mapChunk(transcriptChunk: String, languageCode: String?): Result<String> =
+        override suspend fun prewarm(): Result<Unit> = Result.success(Unit)
+
+        override suspend fun mapChunk(
+            transcriptChunk: String,
+            languageCode: String?,
+            onPartialResult: (String) -> Unit,
+        ): Result<String> =
             Result.success("- Summary bullet")
 
-        override suspend fun reduce(chunkBulletSummaries: List<String>, languageCode: String?): Result<Summary> =
+        override suspend fun reduce(
+            chunkBulletSummaries: List<String>,
+            languageCode: String?,
+            onPartialResult: (String) -> Unit,
+        ): Result<Summary> =
             Result.failure(IllegalStateException("model unavailable"))
+    }
+
+    private class StreamingSummarizationRepository : SummarizationRepository {
+        override suspend fun prewarm(): Result<Unit> = Result.success(Unit)
+
+        override suspend fun mapChunk(
+            transcriptChunk: String,
+            languageCode: String?,
+            onPartialResult: (String) -> Unit,
+        ): Result<String> = runCatching {
+            onPartialResult("- partial map")
+            "- final map"
+        }
+
+        override suspend fun reduce(
+            chunkBulletSummaries: List<String>,
+            languageCode: String?,
+            onPartialResult: (String) -> Unit,
+        ): Result<Summary> = runCatching {
+            onPartialResult("Title: partial reduce")
+            Summary(text = "FINAL SUMMARY")
+        }
     }
 
     private class InMemorySessionRepository : SessionRepository {
@@ -324,6 +420,7 @@ class ProcessSessionUseCaseTest {
         private val wavPaths = mutableMapOf<String, String>()
 
         val chunkSummaries = MutableStateFlow<List<ChunkSummary>>(emptyList())
+        val partialSummaries = mutableListOf<String>()
 
         override fun observeSession(sessionId: String): Flow<ProcessingSession?> =
             sessions.map { state -> state[sessionId] }
@@ -372,6 +469,7 @@ class ProcessSessionUseCaseTest {
 
         override suspend fun setSummaryPartial(sessionId: String, summaryText: String): Result<Unit> = runCatching {
             val existing = sessions.value[sessionId] ?: return@runCatching
+            partialSummaries += summaryText
             sessions.value = sessions.value + (sessionId to existing.copy(summary = summaryText))
         }
 

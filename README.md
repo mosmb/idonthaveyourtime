@@ -18,9 +18,13 @@ Offline/on-device Android app that receives shared audio files (`ACTION_SEND` / 
 - **Offline pipeline**: conversion → transcription → summarization (all on-device)
 - **No FFmpeg dependency**: MediaCodec-based conversion
 - **Whisper transcription**: `whisper.cpp` via JNI
-- **LLM summarization**: `llama.cpp` (GGUF) via JNI
+- **Latency-first summarization runtimes**:
+  - LiteRT-LM for `.litertlm` assets
+  - MediaPipe LLM Inference for `.task` assets
+  - `llama.cpp` for `.gguf` fallback
 - **Foreground processing**: WorkManager (user-visible, cancelable)
 - **Local history**: Room database stores transcript + summary + metadata
+- **Progressive UX**: transcript segments and in-flight summaries are persisted as work completes
 - **Model management**:
   - download suggested models from HuggingFace (requires `INTERNET`)
   - import local model files
@@ -38,7 +42,9 @@ Offline/on-device Android app that receives shared audio files (`ACTION_SEND` / 
 - HuggingFace model download (WorkManager)
 - MediaCodec-based conversion
 - Whisper JNI (`whisper.cpp` submodule)
-- llama.cpp JNI (GGUF) for summaries
+- LiteRT-LM Android runtime (`com.google.ai.edge.litertlm:litertlm-android`)
+- MediaPipe LLM Inference (`com.google.mediapipe:tasks-genai`)
+- llama.cpp JNI fallback for GGUF summaries
 
 ---
 
@@ -93,6 +99,18 @@ The app can:
 - download suggested models from HuggingFace (requires INTERNET)
 - import local model files (copied into context.filesDir/models/)
 
+Supported summarizer model formats:
+- `.litertlm` -> LiteRT-LM
+- `.task` -> MediaPipe LLM Inference
+- `.gguf` -> llama.cpp fallback
+
+Runtime selection:
+- `Auto` prefers the model-format-matching runtime.
+- `.litertlm` selects LiteRT-LM.
+- `.task` selects MediaPipe LLM Inference.
+- `.gguf` selects llama.cpp.
+- If an explicitly selected runtime cannot support the chosen model format, the app falls back to llama.cpp and records the fallback reason in the probe/debug path.
+
 ### Suggested models
 
 Whisper (transcription) from ggerganov/whisper.cpp:
@@ -101,12 +119,22 @@ Whisper (transcription) from ggerganov/whisper.cpp:
 - ggml-small-q5_1.bin
 - ggml-small.en-q5_1.bin
 
-LLM (summarization) GGUF:
-- Qwen2.5-0.5B-Instruct-Q4_K_M.gguf (recommended default)
+LLM (summarization), preferred Google-backed paths first:
+- gemma-4-E2B-it.litertlm
+  Source: `litert-community/gemma-4-E2B-it-litert-lm`
+  Runtime: LiteRT-LM
+- Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task
+  Source: `diamondbelema/edu-hive-llm-models`
+  Runtime: MediaPipe LLM Inference
+- gemma3-270m-it-q8.task
+  Source: `diamondbelema/edu-hive-llm-models`
+  Runtime: MediaPipe LLM Inference
+- Qwen2.5-0.5B-Instruct-Q4_K_M.gguf
+  Runtime: llama.cpp fallback
 - Qwen2.5-1.5B-Instruct-Q4_K_M.gguf
-- gemma-2-2b-it-Q3_K_M.gguf
+  Runtime: llama.cpp fallback
 - gemma-2-2b-it-Q4_K_M.gguf
-- gemma-2-2b-it-Q5_K_M.gguf
+  Runtime: llama.cpp fallback
 
 Debug convenience: bundle models as assets
 
@@ -117,8 +145,19 @@ For local installs, you can bundle model files by placing them under:
 At runtime, bundled assets are extracted into context.filesDir/models/ on first use.
 
 Note: “Summarizer (LLM)” availability is tied to the selected llmModelFileName
-(default: Qwen2.5-0.5B-Instruct-Q4_K_M.gguf). If you bundle a different GGUF,
-select it in the “Quality vs speed” section so it becomes Ready.
+(default: gemma-4-E2B-it.litertlm). If you bundle a different `.litertlm`,
+`.task`, or `.gguf` file, select it in the summarize settings so the correct
+runtime and file become Ready.
+
+### Summarizer runtime notes
+
+- LiteRT-LM is the primary path for supported `.litertlm` models and uses async streamed generation.
+- MediaPipe LLM Inference is the secondary Google-backed path for `.task` models and also streams partial output.
+- llama.cpp remains fully supported as the fallback path for `.gguf` models and for unsupported format/runtime combinations.
+- The app now uses technology-specific runtime names in UI, logs, and probe/debug reporting:
+  - `LiteRT-LM`
+  - `MediaPipe LLM Inference`
+  - `llama.cpp`
 
 ## 🔐 Privacy
 - Pipeline processing is local (import/conversion/transcription/summarization on-device).

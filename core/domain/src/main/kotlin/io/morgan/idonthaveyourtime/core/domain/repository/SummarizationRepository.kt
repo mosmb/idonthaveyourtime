@@ -9,13 +9,17 @@ import io.morgan.idonthaveyourtime.core.model.Summary
  * large inputs.
  */
 interface SummarizationRepository {
+    suspend fun prewarm(): Result<Unit>
+
     suspend fun mapChunk(
         transcriptChunk: String,
         languageCode: String?,
+        onPartialResult: (String) -> Unit = {},
     ): Result<String>
 
     suspend fun reduce(
         chunkBulletSummaries: List<String>,
         languageCode: String?,
+        onPartialResult: (String) -> Unit = {},
     ): Result<Summary>
 }

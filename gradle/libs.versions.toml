@@ -23,6 +23,8 @@ timber = "5.0.1"
 turbine = "1.1.0"
 truth = "1.4.2"
 datastore = "1.1.1"
+litertlm = "0.10.2"
+mediapipeGenai = "0.10.33"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -68,6 +70,8 @@ androidx-room-testing = { group = "androidx.room", name = "room-testing", versio
 
 # Media / Models
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
+google-ai-edge-litertlm-android = { group = "com.google.ai.edge.litertlm", name = "litertlm-android", version.ref = "litertlm" }
+google-mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeGenai" }
 
 # Coroutines
 kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }

@@ -4,16 +4,35 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerLocalDataSource
-import io.morgan.idonthaveyourtime.core.llm.LlamaCppSummarizerLocalDataSource
-import javax.inject.Singleton
+import dagger.multibindings.IntoSet
+import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerBackend
+import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerEngineLocalDataSource
+import io.morgan.idonthaveyourtime.core.llm.LiteRtLmSummarizerEngineLocalDataSource
+import io.morgan.idonthaveyourtime.core.llm.LlamaCppSummarizerEngineLocalDataSource
+import io.morgan.idonthaveyourtime.core.llm.MediaPipeLlmInferenceSummarizerEngineLocalDataSource
 
 @Module
 @InstallIn(SingletonComponent::class)
 internal abstract class LlmDataSourceModule {
 
     @Binds
-    @Singleton
-    abstract fun bindSummarizer(impl: LlamaCppSummarizerLocalDataSource): SummarizerLocalDataSource
-}
+    @IntoSet
+    @SummarizerBackend
+    abstract fun bindLiteRtLmSummarizer(
+        impl: LiteRtLmSummarizerEngineLocalDataSource,
+    ): SummarizerEngineLocalDataSource
 
+    @Binds
+    @IntoSet
+    @SummarizerBackend
+    abstract fun bindMediaPipeSummarizer(
+        impl: MediaPipeLlmInferenceSummarizerEngineLocalDataSource,
+    ): SummarizerEngineLocalDataSource
+
+    @Binds
+    @IntoSet
+    @SummarizerBackend
+    abstract fun bindLlamaSummarizer(
+        impl: LlamaCppSummarizerEngineLocalDataSource,
+    ): SummarizerEngineLocalDataSource
+}

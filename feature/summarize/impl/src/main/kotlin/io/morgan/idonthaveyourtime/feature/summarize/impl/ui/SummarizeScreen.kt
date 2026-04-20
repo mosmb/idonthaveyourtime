@@ -22,6 +22,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -80,6 +81,8 @@ import io.morgan.idonthaveyourtime.core.model.ProcessingSession
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
 import io.morgan.idonthaveyourtime.core.model.SharedAudioInput
 import io.morgan.idonthaveyourtime.core.model.SuggestedModel
+import io.morgan.idonthaveyourtime.core.model.SummarizerModelFormat
+import io.morgan.idonthaveyourtime.core.model.SummarizerRuntime
 import io.morgan.idonthaveyourtime.core.model.WhisperModelSize
 import io.morgan.idonthaveyourtime.feature.summarize.impl.R
 import io.morgan.idonthaveyourtime.feature.summarize.impl.SummarizeUiState
@@ -158,7 +161,7 @@ fun SummarizeScreen(
                 importModelFile(
                     context = context,
                     uri = uri,
-                    allowedFileNames = LLM_FILE_NAMES,
+                    allowedExtensions = LLM_FILE_EXTENSIONS,
                     defaultFileName = state.processingConfig.llmModelFileName,
                 ).fold(
                     onSuccess = { fileName ->
@@ -460,6 +463,32 @@ private fun CurrentSessionCard(
             )
         }
 
+        IdntText(
+            text = configuredSummarizerLabel(config),
+            style = IdntTheme.typography.bodyS,
+            color = IdntTheme.colors.textSecondary,
+        )
+
+        val transcript = session.transcript.orEmpty().trim()
+        if (transcript.isNotBlank()) {
+            IdntCard(
+                containerColor = IdntTheme.colors.surfaceMuted,
+                contentPadding = PaddingValues(12.dp),
+            ) {
+                IdntText(
+                    text = stringResource(R.string.transcript_title),
+                    style = IdntTheme.typography.titleM,
+                )
+                SelectionContainer {
+                    IdntText(
+                        text = transcript,
+                        style = IdntTheme.typography.bodyS,
+                        color = IdntTheme.colors.textSecondary,
+                    )
+                }
+            }
+        }
+
         if (stage in processingStages) {
             val progress = session.progress.takeIf { it > 0f }
             IdntProgressBar(progress = progress)
@@ -480,6 +509,7 @@ private fun CurrentSessionCard(
                         exit = ExitTransition.None,
                     ) {
                         SummaryCard(
+                            title = stringResource(R.string.summary_title),
                             summary = summary,
                             onCopyRequested = { onCopySummary(summary) },
                             onShareRequested = { onShareSummary(summary) },
@@ -515,17 +545,30 @@ private fun CurrentSessionCard(
 
             else -> Unit
         }
+
+        if (stage == ProcessingStage.Summarizing) {
+            val liveSummary = session.summary.orEmpty().trim()
+            if (liveSummary.isNotBlank()) {
+                SummaryCard(
+                    title = stringResource(R.string.live_summary_title),
+                    summary = liveSummary,
+                    onCopyRequested = { onCopySummary(liveSummary) },
+                    onShareRequested = { onShareSummary(liveSummary) },
+                )
+            }
+        }
     }
 }
 
 @Composable
 private fun SummaryCard(
+    title: String,
     summary: String,
     onCopyRequested: () -> Unit,
     onShareRequested: () -> Unit,
 ) {
     IdntCard(containerColor = IdntTheme.colors.accentMuted, contentPadding = PaddingValues(12.dp)) {
-        IdntText(text = stringResource(R.string.summary_title), style = IdntTheme.typography.titleM)
+        IdntText(text = title, style = IdntTheme.typography.titleM)
         SelectionContainer {
             IdntText(text = summary, style = IdntTheme.typography.body)
         }
@@ -673,13 +716,35 @@ private fun SettingsSheetContent(
                 )
             }
 
+            IdntText(text = stringResource(R.string.runtime_title), style = IdntTheme.typography.titleM)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                SummarizerRuntime.entries.forEach { runtime ->
+                    IdntChoiceChip(
+                        text = runtime.displayName,
+                        selected = config.summarizerRuntime == runtime,
+                        onClick = { onConfigChanged(config.copy(summarizerRuntime = runtime)) },
+                    )
+                }
+            }
+
+            val modelFormat = SummarizerModelFormat.fromFileName(config.llmModelFileName)
+            IdntText(text = stringResource(R.string.model_format_title), style = IdntTheme.typography.titleM)
+            IdntText(
+                text = modelFormat?.displayName ?: "Unknown",
+                style = IdntTheme.typography.bodyS,
+                color = IdntTheme.colors.textSecondary,
+            )
+
             IdntText(text = stringResource(R.string.llm_model), style = IdntTheme.typography.titleM)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.llmSuggestedModels.forEach { model ->
                     IdntRadioRow(
                         selected = config.llmModelFileName == model.fileName,
                         label = model.displayName,
-                        description = model.description,
+                        description = suggestedModelDescription(model),
                         onClick = { onConfigChanged(config.copy(llmModelFileName = model.fileName)) },
                     )
                 }
@@ -965,13 +1030,9 @@ private val WHISPER_FILE_NAMES = setOf(
     "ggml-small.bin",
 )
 
-private val LLM_FILE_NAMES = setOf(
-    "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
-    "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
-    "gemma-2-2b-it-Q4_K_M.gguf",
-    "gemma-2-2b-it-Q3_K_M.gguf",
-    "gemma-2-2b-it-Q5_K_M.gguf",
-)
+private val LLM_FILE_EXTENSIONS = SummarizerModelFormat.entries
+    .map { format -> format.fileExtension }
+    .toSet()
 
 private fun defaultWhisperFileName(config: ProcessingConfig): String =
     when (config.whisperModelSize) {
@@ -1013,17 +1074,21 @@ private fun previewUiState(): SummarizeUiState {
     val suggestedModels = listOf(
         SuggestedModel(
             modelId = ModelId.Llm,
-            displayName = "Qwen 0.5B (Q4)",
-            description = "Fastest default option",
-            huggingFaceRepoId = "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
-            fileName = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
+            displayName = "Gemma 4 E2B IT",
+            description = "Preferred LiteRT-LM path",
+            huggingFaceRepoId = "litert-community/gemma-4-E2B-it-litert-lm",
+            fileName = "gemma-4-E2B-it.litertlm",
+            summarizerRuntime = SummarizerRuntime.LiteRtLm,
+            summarizerModelFormat = SummarizerModelFormat.LiteRtLm,
         ),
         SuggestedModel(
             modelId = ModelId.Llm,
-            displayName = "Gemma 2B (Q4)",
-            description = "Higher quality, slower",
-            huggingFaceRepoId = "bartowski/gemma-2-2b-it-GGUF",
-            fileName = "gemma-2-2b-it-Q4_K_M.gguf",
+            displayName = "Qwen2.5 0.5B Instruct",
+            description = "MediaPipe `.task` sample",
+            huggingFaceRepoId = "diamondbelema/edu-hive-llm-models",
+            fileName = "Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+            summarizerRuntime = SummarizerRuntime.MediaPipeLlmInference,
+            summarizerModelFormat = SummarizerModelFormat.Task,
         ),
     )
 
@@ -1076,7 +1141,8 @@ private fun previewUiState(): SummarizeUiState {
 private suspend fun importModelFile(
     context: Context,
     uri: Uri,
-    allowedFileNames: Set<String>,
+    allowedFileNames: Set<String> = emptySet(),
+    allowedExtensions: Set<String> = emptySet(),
     defaultFileName: String,
 ): Result<String> = withContext(Dispatchers.IO) {
     runCatching {
@@ -1089,7 +1155,16 @@ private suspend fun importModelFile(
             ?.trim()
             .orEmpty()
 
-        val targetName = if (allowedFileNames.contains(displayName)) displayName else defaultFileName
+        val extension = displayName.substringAfterLast('.', missingDelimiterValue = "")
+            .lowercase()
+            .trim()
+
+        val targetName = when {
+            allowedFileNames.contains(displayName) -> displayName
+            allowedExtensions.contains(extension) -> displayName
+            allowedFileNames.isNotEmpty() -> defaultFileName
+            else -> throw IllegalStateException("Unsupported model file type: $displayName")
+        }
         val targetDirectory = File(context.filesDir, "models").apply { mkdirs() }
         val targetFile = File(targetDirectory, targetName)
 
@@ -1100,5 +1175,34 @@ private suspend fun importModelFile(
         } ?: throw IllegalStateException("Unable to open selected file")
 
         targetName
+    }
+}
+
+private fun suggestedModelDescription(model: SuggestedModel): String = buildString {
+    append(model.description)
+    model.summarizerRuntime?.let { runtime ->
+        append(" • ")
+        append(runtime.displayName)
+    }
+    model.summarizerModelFormat?.let { format ->
+        append(" • ")
+        append(format.displayName)
+    }
+}
+
+private fun configuredSummarizerLabel(config: ProcessingConfig): String {
+    val format = SummarizerModelFormat.fromFileName(config.llmModelFileName)
+    val autoRuntime = when (format) {
+        SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm
+        SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference
+        SummarizerModelFormat.Gguf -> SummarizerRuntime.LlamaCpp
+        null -> null
+    }
+
+    return when {
+        config.summarizerRuntime == SummarizerRuntime.Auto && autoRuntime != null ->
+            "Summarizer: Auto -> ${autoRuntime.displayName}"
+
+        else -> "Summarizer: ${config.summarizerRuntime.displayName}"
     }
 }

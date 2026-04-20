@@ -12,7 +12,7 @@
     <string name="model_ready">Ready</string>
     <string name="import_model">Import model</string>
     <string name="import_whisper_model">Import Whisper model</string>
-    <string name="import_llm_model">Import LLM model (.gguf)</string>
+    <string name="import_llm_model">Import LLM model (.litertlm, .task, .gguf)</string>
     <string name="download_from_huggingface">Download from HuggingFace</string>
     <string name="cancel_download">Cancel download</string>
     <string name="download_warning_any_network">Downloads can be large and may use cellular data.</string>
@@ -22,6 +22,8 @@
     <string name="close">Close</string>
 
     <string name="quality_title">Quality vs speed</string>
+    <string name="runtime_title">Summarizer runtime</string>
+    <string name="model_format_title">Selected model format</string>
     <string name="preset_fast">Fast</string>
     <string name="preset_balanced">Balanced</string>
     <string name="preset_quality">Quality</string>
