@@ -6,6 +6,7 @@ import io.morgan.idonthaveyourtime.core.domain.repository.SessionRepository
 import io.morgan.idonthaveyourtime.core.model.ChunkSummary
 import io.morgan.idonthaveyourtime.core.model.ProcessingSession
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
+import io.morgan.idonthaveyourtime.core.model.SessionTranscriptionDiagnostics
 import io.morgan.idonthaveyourtime.core.model.Summary
 import io.morgan.idonthaveyourtime.core.model.Transcript
 import io.morgan.idonthaveyourtime.core.model.TranscriptSegment
@@ -66,6 +67,11 @@ private class FakeSessionRepository : SessionRepository {
 
     override suspend fun setTranscript(sessionId: String, transcript: Transcript): Result<Unit> =
         Result.success(Unit)
+
+    override suspend fun setTranscriptionDiagnostics(
+        sessionId: String,
+        diagnostics: SessionTranscriptionDiagnostics,
+    ): Result<Unit> = Result.success(Unit)
 
     override suspend fun upsertTranscriptSegment(sessionId: String, index: Int, segment: TranscriptSegment): Result<Unit> =
         Result.success(Unit)

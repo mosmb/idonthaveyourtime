@@ -12,8 +12,15 @@ import io.morgan.idonthaveyourtime.core.model.LanguageHint
 import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
 import io.morgan.idonthaveyourtime.core.model.ProcessingSession
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
+import io.morgan.idonthaveyourtime.core.model.SessionTranscriptionDiagnostics
 import io.morgan.idonthaveyourtime.core.model.SegmentationConfig
 import io.morgan.idonthaveyourtime.core.model.Summary
+import io.morgan.idonthaveyourtime.core.model.TranscriptionEngineProbeResult
+import io.morgan.idonthaveyourtime.core.model.TranscriptionMetrics
+import io.morgan.idonthaveyourtime.core.model.TranscriptionModelFormat
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRequest
+import io.morgan.idonthaveyourtime.core.model.TranscriptionResult
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import io.morgan.idonthaveyourtime.core.model.Transcript
 import io.morgan.idonthaveyourtime.core.model.TranscriptSegment
 import io.morgan.idonthaveyourtime.core.model.WavAudio
@@ -211,6 +218,55 @@ class ProcessSessionUseCaseTest {
         assertThat(result.isSuccess).isTrue()
         assertThat(summarizer.mapCalls).isEqualTo(3)
         assertThat(repository.chunkSummaries.value).hasSize(3)
+        assertThat(repository.transcriptionDiagnostics?.runtime).isEqualTo(TranscriptionRuntime.WhisperCpp)
+        assertThat(repository.transcriptionDiagnostics?.totalMs).isEqualTo(5_000L)
+        assertThat(repository.transcriptionDiagnostics?.audioDurationMs).isEqualTo(5_000L)
+    }
+
+    @Test
+    fun `invoke preserves processing exception code from transcription failure`() = runTest {
+        val repository = InMemorySessionRepository()
+        repository.createSession(
+            session = ProcessingSession(
+                id = SESSION_ID,
+                createdAtEpochMs = 1L,
+                sourceName = "voice.ogg",
+                mimeType = "audio/ogg",
+                durationMs = null,
+                stage = ProcessingStage.Queued,
+                progress = 0f,
+                transcript = null,
+                summary = null,
+                languageCode = null,
+                errorCode = null,
+                errorMessage = null,
+            ),
+            inputFilePath = "/tmp/import.ogg",
+        ).getOrThrow()
+
+        val useCase = ProcessSessionUseCase(
+            sessionRepository = repository,
+            audioProcessingRepository = FakeAudioProcessingRepository(
+                segments = listOf(AudioSegment(startMs = 0L, endMs = 2_000L)),
+            ),
+            processingConfigRepository = FakeProcessingConfigRepository(),
+            transcriptionRepository = FailingTranscriptionRepository(
+                throwable = io.morgan.idonthaveyourtime.core.common.ProcessingException(
+                    code = "INVALID_WAV",
+                    message = "bad wav",
+                ),
+            ),
+            summarizationRepository = FixedSummarizationRepository(
+                mapResult = "- Summary bullet",
+                reduceResult = Summary(text = "FINAL SUMMARY"),
+            ),
+        )
+
+        val result = useCase(SESSION_ID)
+
+        assertThat(result.isFailure).isTrue()
+        val failure = result.exceptionOrNull() as io.morgan.idonthaveyourtime.core.common.ProcessingException
+        assertThat(failure.code).isEqualTo("INVALID_WAV")
     }
 
     @Test
@@ -255,6 +311,57 @@ class ProcessSessionUseCaseTest {
             "Title: partial reduce",
         )
         assertThat(repository.getSession(SESSION_ID)?.summary).isEqualTo("FINAL SUMMARY")
+    }
+
+    @Test
+    fun `invoke persists live transcript updates from streaming transcription`() = runTest {
+        val repository = InMemorySessionRepository()
+        repository.createSession(
+            session = ProcessingSession(
+                id = SESSION_ID,
+                createdAtEpochMs = 1L,
+                sourceName = "voice.ogg",
+                mimeType = "audio/ogg",
+                durationMs = null,
+                stage = ProcessingStage.Queued,
+                progress = 0f,
+                transcript = null,
+                summary = null,
+                languageCode = null,
+                errorCode = null,
+                errorMessage = null,
+            ),
+            inputFilePath = "/tmp/import.ogg",
+        ).getOrThrow()
+
+        val useCase = ProcessSessionUseCase(
+            sessionRepository = repository,
+            audioProcessingRepository = FakeAudioProcessingRepository(
+                durationMs = 2_000L,
+                segments = listOf(AudioSegment(startMs = 0L, endMs = 2_000L)),
+            ),
+            processingConfigRepository = FakeProcessingConfigRepository(),
+            transcriptionRepository = StreamingTranscriptionRepository(),
+            summarizationRepository = FixedSummarizationRepository(
+                mapResult = "- map",
+                reduceResult = Summary(text = "FINAL SUMMARY"),
+            ),
+        )
+
+        val result = useCase(SESSION_ID)
+
+        assertThat(result.isSuccess).isTrue()
+        assertThat(repository.transcriptWrites).containsAtLeast("partial one", "partial two", "final transcript")
+        assertThat(repository.transcriptWrites.indexOf("partial one")).isLessThan(
+            repository.transcriptWrites.indexOf("final transcript"),
+        )
+        assertThat(repository.transcriptWrites.indexOf("partial two")).isLessThan(
+            repository.transcriptWrites.indexOf("final transcript"),
+        )
+        assertThat(repository.getSession(SESSION_ID)?.transcript).isEqualTo("final transcript")
+        assertThat(repository.transcriptionDiagnostics?.runtime).isEqualTo(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
+        assertThat(repository.transcriptionDiagnostics?.backendName).isEqualTo("google-ai-edge")
+        assertThat(repository.transcriptionDiagnostics?.modelLoadMs).isEqualTo(25L)
     }
 
     private class FakeAudioProcessingRepository(
@@ -302,13 +409,78 @@ class ProcessSessionUseCaseTest {
     private class FixedTranscriptionRepository(
         private val transcript: Transcript,
     ) : TranscriptionRepository {
+        override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(
+            TranscriptionEngineProbeResult(
+                requestedRuntime = TranscriptionRuntime.WhisperCpp,
+                selectedRuntime = TranscriptionRuntime.WhisperCpp,
+                modelFormat = TranscriptionModelFormat.WhisperBin,
+                modelFileName = "fake.bin",
+                supported = true,
+                supportsStreaming = false,
+            ),
+        )
+
         override suspend fun transcribe(
-            audioData: FloatArray,
+            request: TranscriptionRequest,
             languageHint: LanguageHint,
             onProgress: suspend (Float) -> Unit,
-        ): Result<Transcript> = runCatching {
+            onPartialResult: suspend (String) -> Unit,
+        ): Result<TranscriptionResult> = runCatching {
             onProgress(1f)
-            transcript
+            onPartialResult(transcript.text)
+            TranscriptionResult(
+                transcript = transcript,
+                metrics = TranscriptionMetrics(
+                    runtime = TranscriptionRuntime.WhisperCpp,
+                    backendName = "fake",
+                    modelFileName = "fake.bin",
+                    warmStart = true,
+                    modelLoadMs = null,
+                    firstTextMs = (request.endMs - request.startMs).coerceAtLeast(0L),
+                    totalMs = (request.endMs - request.startMs).coerceAtLeast(0L),
+                    audioDurationMs = (request.endMs - request.startMs).coerceAtLeast(0L),
+                    audioSecondsPerWallSecond = 1.0,
+                ),
+            )
+        }
+    }
+
+    private class StreamingTranscriptionRepository : TranscriptionRepository {
+        override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(
+            TranscriptionEngineProbeResult(
+                requestedRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                selectedRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                modelFormat = TranscriptionModelFormat.LiteRtLm,
+                modelFileName = "fake.litertlm",
+                supported = true,
+                supportsStreaming = true,
+            ),
+        )
+
+        override suspend fun transcribe(
+            request: TranscriptionRequest,
+            languageHint: LanguageHint,
+            onProgress: suspend (Float) -> Unit,
+            onPartialResult: suspend (String) -> Unit,
+        ): Result<TranscriptionResult> = runCatching {
+            onPartialResult("partial one")
+            onProgress(0.5f)
+            onPartialResult("partial two")
+            onProgress(1f)
+            TranscriptionResult(
+                transcript = Transcript(text = "final transcript", languageCode = "en"),
+                metrics = TranscriptionMetrics(
+                    runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                    backendName = "google-ai-edge",
+                    modelFileName = "fake.litertlm",
+                    warmStart = false,
+                    modelLoadMs = 25L,
+                    firstTextMs = 10L,
+                    totalMs = 100L,
+                    audioDurationMs = (request.endMs - request.startMs).coerceAtLeast(0L),
+                    audioSecondsPerWallSecond = 20.0,
+                ),
+            )
         }
     }
 
@@ -318,16 +490,64 @@ class ProcessSessionUseCaseTest {
     ) : TranscriptionRepository {
         private var index = 0
 
+        override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(
+            TranscriptionEngineProbeResult(
+                requestedRuntime = TranscriptionRuntime.WhisperCpp,
+                selectedRuntime = TranscriptionRuntime.WhisperCpp,
+                modelFormat = TranscriptionModelFormat.WhisperBin,
+                modelFileName = "fake.bin",
+                supported = true,
+                supportsStreaming = false,
+            ),
+        )
+
         override suspend fun transcribe(
-            audioData: FloatArray,
+            request: TranscriptionRequest,
             languageHint: LanguageHint,
             onProgress: suspend (Float) -> Unit,
-        ): Result<Transcript> = runCatching {
+            onPartialResult: suspend (String) -> Unit,
+        ): Result<TranscriptionResult> = runCatching {
             onProgress(1f)
             val nextText = texts.getOrNull(index) ?: ""
             index += 1
-            Transcript(text = nextText, languageCode = languageCode)
+            onPartialResult(nextText)
+            TranscriptionResult(
+                transcript = Transcript(text = nextText, languageCode = languageCode),
+                metrics = TranscriptionMetrics(
+                    runtime = TranscriptionRuntime.WhisperCpp,
+                    backendName = "fake",
+                    modelFileName = "fake.bin",
+                    warmStart = true,
+                    modelLoadMs = null,
+                    firstTextMs = (request.endMs - request.startMs).coerceAtLeast(0L),
+                    totalMs = (request.endMs - request.startMs).coerceAtLeast(0L),
+                    audioDurationMs = (request.endMs - request.startMs).coerceAtLeast(0L),
+                    audioSecondsPerWallSecond = 1.0,
+                ),
+            )
         }
+    }
+
+    private class FailingTranscriptionRepository(
+        private val throwable: Throwable,
+    ) : TranscriptionRepository {
+        override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(
+            TranscriptionEngineProbeResult(
+                requestedRuntime = TranscriptionRuntime.WhisperCpp,
+                selectedRuntime = TranscriptionRuntime.WhisperCpp,
+                modelFormat = TranscriptionModelFormat.WhisperBin,
+                modelFileName = "fake.bin",
+                supported = true,
+                supportsStreaming = false,
+            ),
+        )
+
+        override suspend fun transcribe(
+            request: TranscriptionRequest,
+            languageHint: LanguageHint,
+            onProgress: suspend (Float) -> Unit,
+            onPartialResult: suspend (String) -> Unit,
+        ): Result<TranscriptionResult> = Result.failure(throwable)
     }
 
     private class FixedSummarizationRepository(
@@ -421,6 +641,9 @@ class ProcessSessionUseCaseTest {
 
         val chunkSummaries = MutableStateFlow<List<ChunkSummary>>(emptyList())
         val partialSummaries = mutableListOf<String>()
+        val transcriptWrites = mutableListOf<String>()
+        var transcriptionDiagnostics: SessionTranscriptionDiagnostics? = null
+        val transcriptionDiagnosticsWrites = mutableListOf<SessionTranscriptionDiagnostics>()
 
         override fun observeSession(sessionId: String): Flow<ProcessingSession?> =
             sessions.map { state -> state[sessionId] }
@@ -452,10 +675,25 @@ class ProcessSessionUseCaseTest {
 
         override suspend fun setTranscript(sessionId: String, transcript: Transcript): Result<Unit> = runCatching {
             val existing = sessions.value[sessionId] ?: return@runCatching
+            transcriptWrites += transcript.text
             sessions.value = sessions.value + (
                 sessionId to existing.copy(
                     transcript = transcript.text,
                     languageCode = transcript.languageCode,
+                )
+            )
+        }
+
+        override suspend fun setTranscriptionDiagnostics(
+            sessionId: String,
+            diagnostics: SessionTranscriptionDiagnostics,
+        ): Result<Unit> = runCatching {
+            val existing = sessions.value[sessionId] ?: return@runCatching
+            transcriptionDiagnostics = diagnostics
+            transcriptionDiagnosticsWrites += diagnostics
+            sessions.value = sessions.value + (
+                sessionId to existing.copy(
+                    transcriptionDiagnostics = diagnostics,
                 )
             )
         }

@@ -1,7 +1,10 @@
 package io.morgan.idonthaveyourtime.core.data.datasource.transcription
 
 import io.morgan.idonthaveyourtime.core.model.LanguageHint
-import io.morgan.idonthaveyourtime.core.model.Transcript
+import io.morgan.idonthaveyourtime.core.model.TranscriptionEngineCapability
+import io.morgan.idonthaveyourtime.core.model.TranscriptionEngineProbeResult
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRequest
+import io.morgan.idonthaveyourtime.core.model.TranscriptionResult
 
 /**
  * Performs speech-to-text transcription locally.
@@ -9,10 +12,14 @@ import io.morgan.idonthaveyourtime.core.model.Transcript
  * This is a **local** data source: implementations must not perform network I/O.
  */
 interface TranscriptionEngineLocalDataSource {
+    fun capability(): TranscriptionEngineCapability
+
+    suspend fun probe(): Result<TranscriptionEngineProbeResult>
+
     suspend fun transcribe(
-        audioData: FloatArray,
+        request: TranscriptionRequest,
         languageHint: LanguageHint = LanguageHint.Auto,
         onProgress: suspend (Float) -> Unit = {},
-    ): Result<Transcript>
+        onPartialResult: suspend (String) -> Unit = {},
+    ): Result<TranscriptionResult>
 }
-

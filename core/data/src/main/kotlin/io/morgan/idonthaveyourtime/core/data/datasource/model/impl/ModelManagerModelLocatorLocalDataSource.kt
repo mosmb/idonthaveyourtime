@@ -89,6 +89,11 @@ internal class ModelManagerModelLocatorLocalDataSource @Inject constructor(
         modelId: ModelId,
         config: ProcessingConfig,
     ): List<String> = when (modelId) {
+        ModelId.Transcription -> listOf(
+            config.transcriptionModelFileName.trim().takeIf { it.isNotEmpty() }
+                ?: ProcessingConfig().transcriptionModelFileName,
+        )
+
         ModelId.Whisper -> {
             val base = listOf("ggml-base-q5_1.bin", "ggml-base.en-q5_1.bin", "ggml-base.en.bin", "ggml-base.bin")
             val small = listOf("ggml-small-q5_1.bin", "ggml-small.en-q5_1.bin", "ggml-small.en.bin", "ggml-small.bin")

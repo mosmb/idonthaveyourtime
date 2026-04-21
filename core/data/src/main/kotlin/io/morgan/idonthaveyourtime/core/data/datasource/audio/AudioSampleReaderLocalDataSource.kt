@@ -11,5 +11,10 @@ interface AudioSampleReaderLocalDataSource {
         startMs: Long,
         endMs: Long,
     ): Result<FloatArray>
-}
 
+    suspend fun read16kMonoWavBytes(
+        wavFilePath: String,
+        startMs: Long,
+        endMs: Long,
+    ): Result<ByteArray>
+}

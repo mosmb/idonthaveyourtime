@@ -40,6 +40,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":core:audio"))
     implementation(project(":core:model"))
     implementation(project(":core:common"))
     implementation(project(":core:data"))

@@ -19,6 +19,7 @@ import io.morgan.idonthaveyourtime.core.domain.repository.SessionRepository
 import io.morgan.idonthaveyourtime.core.domain.usecase.ProcessSessionUseCase
 import io.morgan.idonthaveyourtime.core.model.ProcessingSession
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
+import io.morgan.idonthaveyourtime.core.model.SessionTranscriptionDiagnostics
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.coroutineScope
@@ -128,7 +129,7 @@ class ProcessSessionWorker @AssistedInject constructor(
         val title = session?.sourceName?.takeIf { it.isNotBlank() } ?: "Local Audio Summarizer"
         val stage = session?.stage ?: ProcessingStage.Queued
 
-        val text = when (stage) {
+        val baseText = when (stage) {
             ProcessingStage.Importing -> "Importing audio"
             ProcessingStage.Queued -> "Queued"
             ProcessingStage.Converting -> "Converting to WAV"
@@ -139,6 +140,16 @@ class ProcessSessionWorker @AssistedInject constructor(
             ProcessingStage.Cancelled -> "Cancelled"
             ProcessingStage.Idle -> "Idle"
         }
+        val transcriptionText = session?.transcriptionDiagnostics
+            ?.takeIf { stage in setOf(
+                ProcessingStage.Transcribing,
+                ProcessingStage.Summarizing,
+                ProcessingStage.Success,
+                ProcessingStage.Error,
+            ) }
+            ?.let(::notificationTranscriptionLabel)
+        val text = listOfNotNull(baseText, transcriptionText)
+            .joinToString(separator = " • ")
 
         val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_notify_sync)
@@ -199,4 +210,16 @@ class ProcessSessionWorker @AssistedInject constructor(
         private const val NOTIFICATION_ID = 1337
         private const val TAG = "ProcessSessionWorker"
     }
+}
+
+private fun notificationTranscriptionLabel(
+    diagnostics: SessionTranscriptionDiagnostics,
+): String = buildString {
+    append(diagnostics.runtime.displayName)
+    diagnostics.backendName
+        ?.takeIf { it.isNotBlank() }
+        ?.let { backendName ->
+            append(" ")
+            append(backendName)
+        }
 }

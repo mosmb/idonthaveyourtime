@@ -20,6 +20,8 @@ import io.morgan.idonthaveyourtime.core.data.datasource.model.impl.ModelManagerM
 import io.morgan.idonthaveyourtime.core.data.datasource.model.impl.WorkManagerModelDownloaderRemoteDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.processing.ProcessingQueueLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.processing.TempFileCleanerLocalDataSource
+import io.morgan.idonthaveyourtime.core.data.datasource.transcription.TranscriptionEngineLocalDataSource
+import io.morgan.idonthaveyourtime.core.data.datasource.transcription.impl.RoutingTranscriptionEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.summarization.impl.RoutingSummarizerEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.processing.impl.CacheTempFileCleanerLocalDataSource
@@ -79,6 +81,10 @@ internal abstract class DataSourceBindingsModule {
     @Binds
     @Singleton
     abstract fun bindProcessingConfigStore(impl: DataStoreProcessingConfigLocalDataSource): ProcessingConfigLocalDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindTranscriptionEngine(impl: RoutingTranscriptionEngineLocalDataSource): TranscriptionEngineLocalDataSource
 
     @Binds
     @Singleton
@@ -157,6 +163,22 @@ object DatabaseModule {
                             )
                             """.trimIndent()
                         )
+                    }
+                },
+                object : Migration(2, 3) {
+                    override fun migrate(db: SupportSQLiteDatabase) {
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_runtime TEXT")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_backend_name TEXT")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_model_file_name TEXT")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_warm_start INTEGER")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_model_load_ms INTEGER")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_first_text_ms INTEGER")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_total_ms INTEGER")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_audio_duration_ms INTEGER")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_audio_seconds_per_wall_second REAL")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_fallback_reason TEXT")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_failure_reason TEXT")
+                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_device_label TEXT")
                     }
                 }
             )

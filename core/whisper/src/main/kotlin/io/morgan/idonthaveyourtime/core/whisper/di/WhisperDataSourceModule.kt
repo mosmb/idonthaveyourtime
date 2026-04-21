@@ -4,9 +4,9 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import io.morgan.idonthaveyourtime.core.data.datasource.audio.AudioSampleReaderLocalDataSource
+import dagger.multibindings.IntoSet
 import io.morgan.idonthaveyourtime.core.data.datasource.transcription.TranscriptionEngineLocalDataSource
-import io.morgan.idonthaveyourtime.core.whisper.WavAudioSampleReaderLocalDataSource
+import io.morgan.idonthaveyourtime.core.data.datasource.transcription.TranscriptionBackend
 import io.morgan.idonthaveyourtime.core.whisper.WhisperTranscriptionEngineLocalDataSource
 import javax.inject.Singleton
 
@@ -15,11 +15,8 @@ import javax.inject.Singleton
 internal abstract class WhisperDataSourceModule {
 
     @Binds
-    @Singleton
-    abstract fun bindAudioSampleReader(impl: WavAudioSampleReaderLocalDataSource): AudioSampleReaderLocalDataSource
-
-    @Binds
+    @IntoSet
+    @TranscriptionBackend
     @Singleton
     abstract fun bindTranscriptionEngine(impl: WhisperTranscriptionEngineLocalDataSource): TranscriptionEngineLocalDataSource
 }
-

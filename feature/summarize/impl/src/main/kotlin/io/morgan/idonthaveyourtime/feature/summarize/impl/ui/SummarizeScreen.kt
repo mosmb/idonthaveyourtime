@@ -83,6 +83,8 @@ import io.morgan.idonthaveyourtime.core.model.SharedAudioInput
 import io.morgan.idonthaveyourtime.core.model.SuggestedModel
 import io.morgan.idonthaveyourtime.core.model.SummarizerModelFormat
 import io.morgan.idonthaveyourtime.core.model.SummarizerRuntime
+import io.morgan.idonthaveyourtime.core.model.TranscriptionModelFormat
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import io.morgan.idonthaveyourtime.core.model.WhisperModelSize
 import io.morgan.idonthaveyourtime.feature.summarize.impl.R
 import io.morgan.idonthaveyourtime.feature.summarize.impl.SummarizeUiState
@@ -153,6 +155,33 @@ fun SummarizeScreen(
         },
     )
 
+    val transcriptionImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+        onResult = { uri ->
+            if (uri == null) return@rememberLauncherForActivityResult
+            coroutineScope.launch {
+                importModelFile(
+                    context = context,
+                    uri = uri,
+                    allowedExtensions = TRANSCRIPTION_FILE_EXTENSIONS,
+                    defaultFileName = state.processingConfig.transcriptionModelFileName,
+                ).fold(
+                    onSuccess = { fileName ->
+                        toastMessage = "Imported transcription model as $fileName"
+                        if (fileName != state.processingConfig.transcriptionModelFileName) {
+                            onProcessingConfigChanged(
+                                state.processingConfig.copy(transcriptionModelFileName = fileName),
+                            )
+                        }
+                    },
+                    onFailure = { throwable ->
+                        toastMessage = throwable.message ?: "Unable to import transcription model"
+                    },
+                )
+            }
+        },
+    )
+
     val llmImportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
         onResult = { uri ->
@@ -208,8 +237,10 @@ fun SummarizeScreen(
             toastMessage = copiedMessage
         },
         onShareSummary = { summary -> shareText(context, summary) },
+        onImportTranscriptionRequested = { transcriptionImportLauncher.launch(arrayOf("*/*")) },
         onImportWhisperRequested = { whisperImportLauncher.launch(arrayOf("*/*")) },
         onImportLlmRequested = { llmImportLauncher.launch(arrayOf("*/*")) },
+        onOpenTranscriptionDownloadPicker = { downloadDialogModelId = ModelId.Transcription },
         onOpenWhisperDownloadPicker = { downloadDialogModelId = ModelId.Whisper },
         onOpenLlmDownloadPicker = { downloadDialogModelId = ModelId.Llm },
         onCancelDownloadRequested = onCancelDownload,
@@ -237,8 +268,10 @@ private fun SummarizeScreenContent(
     onRetryRequested: () -> Unit,
     onCopySummary: (String) -> Unit,
     onShareSummary: (String) -> Unit,
+    onImportTranscriptionRequested: () -> Unit,
     onImportWhisperRequested: () -> Unit,
     onImportLlmRequested: () -> Unit,
+    onOpenTranscriptionDownloadPicker: () -> Unit,
     onOpenWhisperDownloadPicker: () -> Unit,
     onOpenLlmDownloadPicker: () -> Unit,
     onCancelDownloadRequested: (ModelId) -> Unit,
@@ -253,7 +286,7 @@ private fun SummarizeScreenContent(
         animationSpec = if (reducedMotion) snap() else tween(durationMillis = IdntTheme.motion.standardMs),
         label = "backgroundScale",
     )
-    val modelsReady = state.whisperAvailability == ModelAvailability.Ready &&
+    val modelsReady = state.transcriptionAvailability == ModelAvailability.Ready &&
         state.llmAvailability == ModelAvailability.Ready
 
     IdntSurface(safeDrawingPadding = false) {
@@ -327,8 +360,10 @@ private fun SummarizeScreenContent(
             ) {
                 SettingsSheetContent(
                     state = state,
+                    onImportTranscriptionRequested = onImportTranscriptionRequested,
                     onImportWhisperRequested = onImportWhisperRequested,
                     onImportLlmRequested = onImportLlmRequested,
+                    onDownloadTranscriptionRequested = onOpenTranscriptionDownloadPicker,
                     onDownloadWhisperRequested = onOpenWhisperDownloadPicker,
                     onDownloadLlmRequested = onOpenLlmDownloadPicker,
                     onCancelDownloadRequested = onCancelDownloadRequested,
@@ -340,6 +375,7 @@ private fun SummarizeScreenContent(
                 DownloadModelDialog(
                     modelId = modelId,
                     models = when (modelId) {
+                        ModelId.Transcription -> state.transcriptionSuggestedModels
                         ModelId.Whisper -> state.whisperSuggestedModels
                         ModelId.Llm -> state.llmSuggestedModels
                     },
@@ -455,13 +491,21 @@ private fun CurrentSessionCard(
             )
         }
 
-        if (stage == ProcessingStage.Transcribing) {
-            IdntText(
-                text = "Whisper: ${whisperModelLabel(config.whisperModelSize)}",
-                style = IdntTheme.typography.bodyS,
-                color = IdntTheme.colors.textSecondary,
-            )
-        }
+        IdntText(
+            text = transcriptionStatusLabel(session = session, config = config),
+            style = IdntTheme.typography.bodyS,
+            color = IdntTheme.colors.textSecondary,
+        )
+        session.transcriptionDiagnostics
+            ?.fallbackReason
+            ?.takeIf { it.isNotBlank() }
+            ?.let { fallbackReason ->
+                IdntText(
+                    text = "Fallback: $fallbackReason",
+                    style = IdntTheme.typography.bodyS,
+                    color = IdntTheme.colors.textSecondary,
+                )
+            }
 
         IdntText(
             text = configuredSummarizerLabel(config),
@@ -644,8 +688,10 @@ private fun HistoryRow(
 @Composable
 private fun SettingsSheetContent(
     state: SummarizeUiState,
+    onImportTranscriptionRequested: () -> Unit,
     onImportWhisperRequested: () -> Unit,
     onImportLlmRequested: () -> Unit,
+    onDownloadTranscriptionRequested: () -> Unit,
     onDownloadWhisperRequested: () -> Unit,
     onDownloadLlmRequested: () -> Unit,
     onCancelDownloadRequested: (ModelId) -> Unit,
@@ -665,7 +711,15 @@ private fun SettingsSheetContent(
         Column(verticalArrangement = Arrangement.spacedBy(IdntTheme.spacing.s)) {
             IdntText(text = stringResource(R.string.models_title), style = IdntTheme.typography.titleM)
             ModelRow(
-                label = stringResource(R.string.whisper_model),
+                label = stringResource(R.string.transcription_model),
+                availability = state.transcriptionAvailability,
+                selectedFileName = config.transcriptionModelFileName,
+                onImportRequested = onImportTranscriptionRequested,
+                onDownloadRequested = onDownloadTranscriptionRequested,
+                onCancelDownloadRequested = { onCancelDownloadRequested(ModelId.Transcription) },
+            )
+            ModelRow(
+                label = stringResource(R.string.whisper_fallback_model),
                 availability = state.whisperAvailability,
                 selectedFileName = defaultWhisperFileName(config),
                 onImportRequested = onImportWhisperRequested,
@@ -714,6 +768,32 @@ private fun SettingsSheetContent(
                     style = IdntTheme.typography.bodyS,
                     color = IdntTheme.colors.textSecondary,
                 )
+            }
+
+            IdntText(text = stringResource(R.string.transcription_runtime_title), style = IdntTheme.typography.titleM)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                TranscriptionRuntime.entries.forEach { runtime ->
+                    IdntChoiceChip(
+                        text = runtime.displayName,
+                        selected = config.transcriptionRuntime == runtime,
+                        onClick = { onConfigChanged(config.copy(transcriptionRuntime = runtime)) },
+                    )
+                }
+            }
+
+            IdntText(text = stringResource(R.string.transcription_model), style = IdntTheme.typography.titleM)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                state.transcriptionSuggestedModels.forEach { model ->
+                    IdntRadioRow(
+                        selected = config.transcriptionModelFileName == model.fileName,
+                        label = model.displayName,
+                        description = suggestedModelDescription(model),
+                        onClick = { onConfigChanged(config.copy(transcriptionModelFileName = model.fileName)) },
+                    )
+                }
             }
 
             IdntText(text = stringResource(R.string.runtime_title), style = IdntTheme.typography.titleM)
@@ -825,6 +905,7 @@ private fun DownloadModelDialog(
     onDownloadRequested: (SuggestedModel) -> Unit,
 ) {
     val title = when (modelId) {
+        ModelId.Transcription -> stringResource(R.string.download_transcription_title)
         ModelId.Whisper -> stringResource(R.string.download_whisper_title)
         ModelId.Llm -> stringResource(R.string.download_llm_title)
     }
@@ -1006,11 +1087,6 @@ private fun applyQualityPreset(config: ProcessingConfig, preset: QualityPreset):
     )
 }
 
-private fun whisperModelLabel(size: WhisperModelSize): String = when (size) {
-    WhisperModelSize.Base -> "Base"
-    WhisperModelSize.Small -> "Small"
-}
-
 private val processingStages = setOf(
     ProcessingStage.Importing,
     ProcessingStage.Queued,
@@ -1031,6 +1107,10 @@ private val WHISPER_FILE_NAMES = setOf(
 )
 
 private val LLM_FILE_EXTENSIONS = SummarizerModelFormat.entries
+    .map { format -> format.fileExtension }
+    .toSet()
+
+private val TRANSCRIPTION_FILE_EXTENSIONS = TranscriptionModelFormat.entries
     .map { format -> format.fileExtension }
     .toSet()
 
@@ -1057,8 +1137,10 @@ private fun SummarizeScreenPreview() {
             onRetryRequested = {},
             onCopySummary = {},
             onShareSummary = {},
+            onImportTranscriptionRequested = {},
             onImportWhisperRequested = {},
             onImportLlmRequested = {},
+            onOpenTranscriptionDownloadPicker = {},
             onOpenWhisperDownloadPicker = {},
             onOpenLlmDownloadPicker = {},
             onCancelDownloadRequested = {},
@@ -1138,8 +1220,10 @@ private fun previewUiState(): SummarizeUiState {
     return SummarizeUiState(
         activeSession = activeSession,
         recentSessions = recentSessions,
+        transcriptionAvailability = ModelAvailability.Ready,
         whisperAvailability = ModelAvailability.Ready,
         llmAvailability = ModelAvailability.Ready,
+        transcriptionSuggestedModels = emptyList(),
         whisperSuggestedModels = emptyList(),
         llmSuggestedModels = suggestedModels,
         processingConfig = ProcessingConfig(),
@@ -1189,6 +1273,10 @@ private suspend fun importModelFile(
 
 private fun suggestedModelDescription(model: SuggestedModel): String = buildString {
     append(model.description)
+    model.transcriptionRuntime?.let { runtime ->
+        append(" • ")
+        append(runtime.displayName)
+    }
     model.summarizerRuntime?.let { runtime ->
         append(" • ")
         append(runtime.displayName)
@@ -1196,6 +1284,44 @@ private fun suggestedModelDescription(model: SuggestedModel): String = buildStri
     model.summarizerModelFormat?.let { format ->
         append(" • ")
         append(format.displayName)
+    }
+}
+
+private fun transcriptionStatusLabel(
+    session: ProcessingSession,
+    config: ProcessingConfig,
+): String {
+    val diagnostics = session.transcriptionDiagnostics
+    if (diagnostics != null) {
+        return buildString {
+            append("Transcription: ")
+            append(diagnostics.runtime.displayName)
+            diagnostics.backendName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { backendName ->
+                    append(" • ")
+                    append(backendName)
+                }
+            diagnostics.modelFileName
+                ?.takeIf { it.isNotBlank() }
+                ?.let { modelFileName ->
+                    append(" • ")
+                    append(modelFileName)
+                }
+        }
+    }
+
+    return configuredTranscriptionLabel(config)
+}
+
+private fun configuredTranscriptionLabel(config: ProcessingConfig): String {
+    val modelLabel = config.transcriptionModelFileName.trim()
+        .substringAfterLast('/')
+        .ifBlank { "unconfigured model" }
+
+    return when (config.transcriptionRuntime) {
+        TranscriptionRuntime.Auto -> "Transcription: Auto • $modelLabel"
+        else -> "Transcription: ${config.transcriptionRuntime.displayName} • $modelLabel"
     }
 }
 

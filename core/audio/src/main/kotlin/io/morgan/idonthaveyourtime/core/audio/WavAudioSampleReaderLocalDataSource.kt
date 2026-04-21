@@ -1,4 +1,4 @@
-package io.morgan.idonthaveyourtime.core.whisper
+package io.morgan.idonthaveyourtime.core.audio
 
 import io.morgan.idonthaveyourtime.core.data.datasource.audio.AudioSampleReaderLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.di.IoDispatcher
@@ -18,6 +18,18 @@ internal class WavAudioSampleReaderLocalDataSource @Inject constructor(
         runCatching {
             WavSegmentReader(File(wavFilePath)).use { reader ->
                 reader.readFloats(startMs = startMs, endMs = endMs)
+            }
+        }
+    }
+
+    override suspend fun read16kMonoWavBytes(
+        wavFilePath: String,
+        startMs: Long,
+        endMs: Long,
+    ): Result<ByteArray> = withContext(ioDispatcher) {
+        runCatching {
+            WavSegmentReader(File(wavFilePath)).use { reader ->
+                reader.readWavBytes(startMs = startMs, endMs = endMs)
             }
         }
     }

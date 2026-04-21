@@ -48,6 +48,7 @@ class SummarizeViewModel @Inject constructor(
     private val activeSessionId = MutableStateFlow<String?>(null)
     private val transientMessage = MutableStateFlow<String?>(null)
 
+    private val transcriptionSuggestedModels: List<SuggestedModel> = getSuggestedModelsUseCase(ModelId.Transcription)
     private val whisperSuggestedModels: List<SuggestedModel> = getSuggestedModelsUseCase(ModelId.Whisper)
     private val llmSuggestedModels: List<SuggestedModel> = getSuggestedModelsUseCase(ModelId.Llm)
 
@@ -60,25 +61,39 @@ class SummarizeViewModel @Inject constructor(
     }
 
     private val recentSessionsFlow = observeRecentSessionsUseCase()
+    private val transcriptionModelFlow = observeModelAvailabilityUseCase(ModelId.Transcription)
     private val whisperModelFlow = observeModelAvailabilityUseCase(ModelId.Whisper)
     private val llmModelFlow = observeModelAvailabilityUseCase(ModelId.Llm)
     private val processingConfigFlow = observeProcessingConfigUseCase()
+    private val modelStateFlow = combine(
+        transcriptionModelFlow,
+        whisperModelFlow,
+        llmModelFlow,
+        processingConfigFlow,
+    ) { transcriptionAvailability, whisperAvailability, llmAvailability, processingConfig ->
+        ModelState(
+            transcriptionAvailability = transcriptionAvailability,
+            whisperAvailability = whisperAvailability,
+            llmAvailability = llmAvailability,
+            processingConfig = processingConfig,
+        )
+    }
 
     private val baseUiState = combine(
         activeSessionFlow,
         recentSessionsFlow,
-        whisperModelFlow,
-        llmModelFlow,
-        processingConfigFlow,
-    ) { activeSession, recentSessions, whisperAvailability, llmAvailability, processingConfig ->
+        modelStateFlow,
+    ) { activeSession, recentSessions, modelState ->
         SummarizeUiState(
             activeSession = activeSession,
             recentSessions = recentSessions,
-            whisperAvailability = whisperAvailability,
-            llmAvailability = llmAvailability,
+            transcriptionAvailability = modelState.transcriptionAvailability,
+            whisperAvailability = modelState.whisperAvailability,
+            llmAvailability = modelState.llmAvailability,
+            transcriptionSuggestedModels = transcriptionSuggestedModels,
             whisperSuggestedModels = whisperSuggestedModels,
             llmSuggestedModels = llmSuggestedModels,
-            processingConfig = processingConfig,
+            processingConfig = modelState.processingConfig,
         )
     }
 
@@ -152,9 +167,14 @@ class SummarizeViewModel @Inject constructor(
 
     fun onDownloadSuggestedModel(model: SuggestedModel) {
         viewModelScope.launch {
-            if (model.modelId == ModelId.Llm) {
-                val currentConfig = uiState.value.processingConfig
-                setProcessingConfigUseCase(currentConfig.copy(llmModelFileName = model.fileName))
+            val currentConfig = uiState.value.processingConfig
+            val nextConfig = when (model.modelId) {
+                ModelId.Transcription -> currentConfig.copy(transcriptionModelFileName = model.fileName)
+                ModelId.Whisper -> currentConfig
+                ModelId.Llm -> currentConfig.copy(llmModelFileName = model.fileName)
+            }
+            if (nextConfig != currentConfig) {
+                setProcessingConfigUseCase(nextConfig)
                     .onFailure { throwable ->
                         transientMessage.value = throwable.message ?: "Unable to save model selection"
                     }
@@ -178,4 +198,11 @@ class SummarizeViewModel @Inject constructor(
                 }
         }
     }
+
+    private data class ModelState(
+        val transcriptionAvailability: io.morgan.idonthaveyourtime.core.model.ModelAvailability,
+        val whisperAvailability: io.morgan.idonthaveyourtime.core.model.ModelAvailability,
+        val llmAvailability: io.morgan.idonthaveyourtime.core.model.ModelAvailability,
+        val processingConfig: ProcessingConfig,
+    )
 }

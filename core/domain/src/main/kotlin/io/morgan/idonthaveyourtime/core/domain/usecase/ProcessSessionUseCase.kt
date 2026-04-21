@@ -6,12 +6,14 @@ import io.morgan.idonthaveyourtime.core.domain.repository.ProcessingConfigReposi
 import io.morgan.idonthaveyourtime.core.domain.repository.SessionRepository
 import io.morgan.idonthaveyourtime.core.domain.repository.SummarizationRepository
 import io.morgan.idonthaveyourtime.core.domain.repository.TranscriptionRepository
+import io.morgan.idonthaveyourtime.core.domain.transcript.TranscriptionMetricsAccumulator
 import io.morgan.idonthaveyourtime.core.domain.transcript.TranscriptOverlapMerger
 import io.morgan.idonthaveyourtime.core.model.ChunkSummary
 import io.morgan.idonthaveyourtime.core.model.LanguageHint
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
 import io.morgan.idonthaveyourtime.core.model.SegmentationConfig
 import io.morgan.idonthaveyourtime.core.model.Summary
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRequest
 import io.morgan.idonthaveyourtime.core.model.Transcript
 import io.morgan.idonthaveyourtime.core.model.TranscriptSegment
 import javax.inject.Inject
@@ -129,7 +131,9 @@ class ProcessSessionUseCase @Inject constructor(
         val chunkBullets = mutableListOf<String>()
 
         val transcriptBuilder = StringBuilder()
+        val transcriptionMetricsAccumulator = TranscriptionMetricsAccumulator()
         var previousRawText: String? = null
+        var lastPersistedTranscriptText: String? = null
 
         if (segments.isEmpty()) {
             sessionRepository.setTranscript(
@@ -154,33 +158,69 @@ class ProcessSessionUseCase @Inject constructor(
             )
         } else {
             segments.forEachIndexed { index, segment ->
-                val audioData = audioProcessingRepository.read16kMonoFloats(
-                    wavFilePath = wavAudio.filePath,
-                    startMs = segment.startMs,
-                    endMs = segment.endMs,
-                ).getOrElse { throwable ->
-                    throw ProcessingException(
-                        code = "AUDIO_READ_FAILED",
-                        message = throwable.message ?: "Unable to read audio segment",
-                        cause = throwable,
-                    )
-                }
-
                 val languageHint = detectedLanguageCode?.let { code ->
                     LanguageHint.Fixed(code)
                 } ?: LanguageHint.Auto
+                val completedRatio = if (index == 0) {
+                    0f
+                } else {
+                    (segments[index - 1].endMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
+                }
+                val segmentRatio = (segment.endMs.toFloat() / totalMs.toFloat()).coerceIn(completedRatio, 1f)
 
-                val segmentTranscript = transcriptionRepository.transcribe(
-                    audioData = audioData,
+                val segmentTranscriptionResult = transcriptionRepository.transcribe(
+                    request = TranscriptionRequest(
+                        wavFilePath = wavAudio.filePath,
+                        startMs = segment.startMs,
+                        endMs = segment.endMs,
+                    ),
                     languageHint = languageHint,
-                    onProgress = {},
+                    onProgress = { progress ->
+                        val ratio = completedRatio + ((segmentRatio - completedRatio) * progress.coerceIn(0f, 1f))
+                        sessionRepository.updateStage(
+                            sessionId = sessionId,
+                            stage = ProcessingStage.Transcribing,
+                            progress = (0.05f + (0.95f * ratio)).coerceIn(0.05f, 1f),
+                        )
+                    },
+                    onPartialResult = { partial ->
+                        val partialText = partial.trim()
+                        if (partialText.isBlank()) {
+                            return@transcribe
+                        }
+                        val mergedPartialText = previousRawText?.let { previousText ->
+                            TranscriptOverlapMerger.dropBestOverlapPrefix(previousText, partialText)
+                        } ?: partialText
+                        val liveTranscript = buildTranscriptText(
+                            completedTranscript = transcriptBuilder.toString(),
+                            currentSegmentText = mergedPartialText,
+                        )
+                        if (liveTranscript.isNotBlank()) {
+                            lastPersistedTranscriptText = persistTranscriptPreview(
+                                sessionId = sessionId,
+                                transcriptText = liveTranscript,
+                                languageCode = detectedLanguageCode ?: (languageHint as? LanguageHint.Fixed)?.languageCode,
+                                lastPersistedTranscriptText = lastPersistedTranscriptText,
+                            )
+                        }
+                    },
                 ).getOrElse { throwable ->
+                    if (throwable is ProcessingException) {
+                        throw throwable
+                    }
                     throw ProcessingException(
                         code = "TRANSCRIPTION_FAILED",
                         message = throwable.message ?: "Transcription failed",
                         cause = throwable,
                     )
                 }
+
+                val segmentTranscript = segmentTranscriptionResult.transcript
+                transcriptionMetricsAccumulator.record(segmentTranscriptionResult.metrics)
+                persistTranscriptionDiagnostics(
+                    sessionId = sessionId,
+                    diagnostics = transcriptionMetricsAccumulator.snapshot(),
+                )
 
                 if (detectedLanguageCode.isNullOrBlank()) {
                     detectedLanguageCode = segmentTranscript.languageCode
@@ -228,6 +268,7 @@ class ProcessSessionUseCase @Inject constructor(
                         cause = throwable,
                     )
                 }
+                lastPersistedTranscriptText = transcriptBuilder.toString()
 
                 val ratio = (segment.endMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
                 sessionRepository.updateStage(
@@ -416,5 +457,66 @@ class ProcessSessionUseCase @Inject constructor(
             }
         }.joinToString(separator = "\n\n")
             .trim()
+    }
+
+    private fun buildTranscriptText(
+        completedTranscript: String,
+        currentSegmentText: String? = null,
+    ): String {
+        val completed = completedTranscript.trim()
+        val current = currentSegmentText?.trim().orEmpty()
+
+        return when {
+            completed.isEmpty() -> current
+            current.isEmpty() -> completed
+            else -> "$completed\n$current"
+        }
+    }
+
+    private suspend fun persistTranscriptPreview(
+        sessionId: String,
+        transcriptText: String,
+        languageCode: String?,
+        lastPersistedTranscriptText: String?,
+    ): String {
+        if (transcriptText == lastPersistedTranscriptText) {
+            return lastPersistedTranscriptText
+        }
+
+        sessionRepository.setTranscript(
+            sessionId = sessionId,
+            transcript = Transcript(
+                text = transcriptText,
+                languageCode = languageCode,
+            ),
+        ).getOrElse { throwable ->
+            throw ProcessingException(
+                code = "SESSION_UPDATE_FAILED",
+                message = throwable.message ?: "Unable to persist transcript",
+                cause = throwable,
+            )
+        }
+
+        return transcriptText
+    }
+
+    private suspend fun persistTranscriptionDiagnostics(
+        sessionId: String,
+        diagnostics: io.morgan.idonthaveyourtime.core.model.SessionTranscriptionDiagnostics?,
+    ) {
+        if (diagnostics == null) {
+            return
+        }
+
+        sessionRepository.setTranscriptionDiagnostics(
+            sessionId = sessionId,
+            diagnostics = diagnostics,
+        ).getOrElse { throwable ->
+            throw ProcessingException(
+                code = "SESSION_UPDATE_FAILED",
+                message = throwable.message ?: "Unable to persist transcription diagnostics",
+                cause = throwable,
+            )
+        }
     }
 }

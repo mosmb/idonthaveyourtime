@@ -13,4 +13,5 @@ data class ProcessingSession(
     val languageCode: String?,
     val errorCode: String?,
     val errorMessage: String?,
+    val transcriptionDiagnostics: SessionTranscriptionDiagnostics? = null,
 )

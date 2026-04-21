@@ -8,8 +8,10 @@ import io.morgan.idonthaveyourtime.core.model.SuggestedModel
 data class SummarizeUiState(
     val activeSession: ProcessingSession? = null,
     val recentSessions: List<ProcessingSession> = emptyList(),
+    val transcriptionAvailability: ModelAvailability = ModelAvailability.Missing,
     val whisperAvailability: ModelAvailability = ModelAvailability.Missing,
     val llmAvailability: ModelAvailability = ModelAvailability.Missing,
+    val transcriptionSuggestedModels: List<SuggestedModel> = emptyList(),
     val whisperSuggestedModels: List<SuggestedModel> = emptyList(),
     val llmSuggestedModels: List<SuggestedModel> = emptyList(),
     val processingConfig: ProcessingConfig = ProcessingConfig(),

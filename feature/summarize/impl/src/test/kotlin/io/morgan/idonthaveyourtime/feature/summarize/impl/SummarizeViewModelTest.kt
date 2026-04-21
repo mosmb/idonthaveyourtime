@@ -24,6 +24,7 @@ import io.morgan.idonthaveyourtime.core.model.ModelId
 import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
 import io.morgan.idonthaveyourtime.core.model.ProcessingSession
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
+import io.morgan.idonthaveyourtime.core.model.SessionTranscriptionDiagnostics
 import io.morgan.idonthaveyourtime.core.model.SharedAudioInput
 import io.morgan.idonthaveyourtime.core.model.Summary
 import io.morgan.idonthaveyourtime.core.model.SuggestedModel
@@ -160,6 +161,52 @@ class SummarizeViewModelTest {
 
         assertThat(modelRepository.enqueuedModels).contains(llmModel)
         assertThat(viewModel.uiState.value.processingConfig.llmModelFileName).isEqualTo(llmModel.fileName)
+
+        collectionJob.cancel()
+    }
+
+    @Test
+    fun `onDownloadSuggestedModel selects transcription file and enqueues download`() = runTest {
+        val repository = InMemorySessionRepository()
+        val queue = FakeProcessingQueueRepository()
+        val processingConfigRepository = FakeProcessingConfigRepository()
+        val modelRepository = FakeModelRepository()
+
+        val viewModel = SummarizeViewModel(
+            enqueueSharedAudioUseCase = EnqueueSharedAudioUseCase(
+                sessionRepository = repository,
+                audioImportRepository = FakeAudioImportRepository(),
+                processingQueueRepository = queue,
+            ),
+            observeSessionUseCase = ObserveSessionUseCase(repository),
+            observeRecentSessionsUseCase = ObserveRecentSessionsUseCase(repository),
+            cancelSessionUseCase = CancelSessionUseCase(
+                processingQueueRepository = queue,
+                sessionRepository = repository,
+            ),
+            requeueSessionUseCase = RequeueSessionUseCase(repository, queue),
+            observeModelAvailabilityUseCase = ObserveModelAvailabilityUseCase(modelRepository),
+            getSuggestedModelsUseCase = GetSuggestedModelsUseCase(),
+            downloadSuggestedModelUseCase = DownloadSuggestedModelUseCase(modelRepository),
+            cancelModelDownloadUseCase = CancelModelDownloadUseCase(modelRepository),
+            observeProcessingConfigUseCase = ObserveProcessingConfigUseCase(processingConfigRepository),
+            setProcessingConfigUseCase = SetProcessingConfigUseCase(processingConfigRepository),
+        )
+
+        val collectionJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect { }
+        }
+
+        advanceUntilIdle()
+
+        val transcriptionModel = viewModel.uiState.value.transcriptionSuggestedModels
+            .first { it.modelId == ModelId.Transcription }
+        viewModel.onDownloadSuggestedModel(transcriptionModel)
+        advanceUntilIdle()
+
+        assertThat(modelRepository.enqueuedModels).contains(transcriptionModel)
+        assertThat(viewModel.uiState.value.processingConfig.transcriptionModelFileName)
+            .isEqualTo(transcriptionModel.fileName)
 
         collectionJob.cancel()
     }
@@ -337,6 +384,18 @@ class SummarizeViewModelTest {
                 sessionId to existing.copy(
                     transcript = transcript.text,
                     languageCode = transcript.languageCode,
+                )
+            )
+        }
+
+        override suspend fun setTranscriptionDiagnostics(
+            sessionId: String,
+            diagnostics: SessionTranscriptionDiagnostics,
+        ): Result<Unit> = runCatching {
+            val existing = sessions.value[sessionId] ?: return@runCatching
+            sessions.value = sessions.value + (
+                sessionId to existing.copy(
+                    transcriptionDiagnostics = diagnostics,
                 )
             )
         }

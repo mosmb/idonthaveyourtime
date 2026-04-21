@@ -1,25 +1,35 @@
 package io.morgan.idonthaveyourtime.core.whisper
 
 import io.morgan.idonthaveyourtime.core.data.datasource.model.ModelLocatorLocalDataSource
+import io.morgan.idonthaveyourtime.core.data.datasource.audio.AudioSampleReaderLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.transcription.TranscriptionEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.di.DefaultDispatcher
 import io.morgan.idonthaveyourtime.core.model.LanguageHint
 import io.morgan.idonthaveyourtime.core.model.ModelId
+import io.morgan.idonthaveyourtime.core.model.TranscriptionEngineCapability
+import io.morgan.idonthaveyourtime.core.model.TranscriptionEngineProbeResult
+import io.morgan.idonthaveyourtime.core.model.TranscriptionMetrics
+import io.morgan.idonthaveyourtime.core.model.TranscriptionModelFormat
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRequest
+import io.morgan.idonthaveyourtime.core.model.TranscriptionResult
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import io.morgan.idonthaveyourtime.core.model.Transcript
-import kotlin.system.measureTimeMillis
+import java.io.File
 import javax.inject.Inject
+import kotlin.system.measureTimeMillis
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.job
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 internal class WhisperTranscriptionEngineLocalDataSource @Inject constructor(
     private val modelLocator: ModelLocatorLocalDataSource,
+    private val audioSampleReader: AudioSampleReaderLocalDataSource,
     @DefaultDispatcher private val defaultDispatcher: CoroutineDispatcher,
 ) : TranscriptionEngineLocalDataSource {
 
@@ -27,14 +37,41 @@ internal class WhisperTranscriptionEngineLocalDataSource @Inject constructor(
     private var cachedModelPath: String? = null
     private var cachedContextPtr: Long = 0L
 
+    override fun capability(): TranscriptionEngineCapability =
+        TranscriptionEngineCapability(
+            runtime = TranscriptionRuntime.WhisperCpp,
+            supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
+            supportsStreaming = false,
+            supportsAsyncGeneration = false,
+            supportsHardwareAcceleration = false,
+        )
+
+    override suspend fun probe(): Result<TranscriptionEngineProbeResult> = runCatching {
+        val modelPath = modelLocator.getModelPath(ModelId.Whisper).getOrThrow()
+        val fileName = modelPath.substringAfterLast('/')
+        val modelFormat = TranscriptionModelFormat.fromFileName(fileName)
+        TranscriptionEngineProbeResult(
+            requestedRuntime = TranscriptionRuntime.WhisperCpp,
+            selectedRuntime = TranscriptionRuntime.WhisperCpp,
+            modelFormat = modelFormat,
+            modelFileName = fileName,
+            supported = modelFormat == TranscriptionModelFormat.WhisperBin,
+            supportsStreaming = capability().supportsStreaming,
+            failureReason = if (modelFormat == TranscriptionModelFormat.WhisperBin) null else "Whisper requires a `.bin` model.",
+        )
+    }
+
     override suspend fun transcribe(
-        audioData: FloatArray,
+        request: TranscriptionRequest,
         languageHint: LanguageHint,
         onProgress: suspend (Float) -> Unit,
-    ): Result<Transcript> = withContext(defaultDispatcher) {
+        onPartialResult: suspend (String) -> Unit,
+    ): Result<TranscriptionResult> = withContext(defaultDispatcher) {
         Timber.tag(TAG).i(
-            "Transcription start audioSamples=%d languageHint=%s",
-            audioData.size,
+            "Transcription start wavFile=%s startMs=%d endMs=%d languageHint=%s",
+            request.wavFilePath,
+            request.startMs,
+            request.endMs,
             languageHint,
         )
 
@@ -55,11 +92,14 @@ internal class WhisperTranscriptionEngineLocalDataSource @Inject constructor(
                 Timber.tag(TAG).i(
                     "Whisper model ready path=%s sizeBytes=%d resolvedInMs=%d",
                     resolvedModelPath,
-                    runCatching { java.io.File(resolvedModelPath).length() }.getOrDefault(-1L),
+                    runCatching { File(resolvedModelPath).length() }.getOrDefault(-1L),
                     modelResolveMs,
                 )
             }
 
+            val audioData = readAudioData(request)
+            val audioDurationMs = (request.endMs - request.startMs).coerceAtLeast(0L)
+            val audioSeconds = audioData.size.toDouble() / 16_000.0
             val language = resolveLanguage(languageHint)
 
             coroutineScope {
@@ -83,8 +123,6 @@ internal class WhisperTranscriptionEngineLocalDataSource @Inject constructor(
 
                 try {
                     val numThreads = WhisperCpuConfig.preferredThreadCount
-                    val audioSeconds = audioData.size.toDouble() / 16_000.0
-
                     var nativeElapsedMs = 0L
                     val (mergedText, detectedLanguage) = nativeMutex.withLock {
                         val contextPtr = ensureContextLocked(resolvedModelPath)
@@ -135,10 +173,30 @@ internal class WhisperTranscriptionEngineLocalDataSource @Inject constructor(
 
                     progressChannel.trySend(1f)
 
-                    Transcript(
+                    val transcript = Transcript(
                         text = if (mergedText.isBlank()) "[empty transcription]" else mergedText,
                         languageCode = detectedLanguage,
                         segments = emptyList(),
+                    )
+                    onPartialResult(transcript.text)
+
+                    TranscriptionResult(
+                        transcript = transcript,
+                        metrics = TranscriptionMetrics(
+                            runtime = TranscriptionRuntime.WhisperCpp,
+                            backendName = "whisper.cpp",
+                            modelFileName = resolvedModelPath.substringAfterLast(File.separatorChar),
+                            warmStart = cachedModelPathSnapshot != null,
+                            modelLoadMs = if (cachedModelPathSnapshot == null) modelResolveMs else null,
+                            firstTextMs = nativeElapsedMs,
+                            totalMs = nativeElapsedMs,
+                            audioDurationMs = audioDurationMs,
+                            audioSecondsPerWallSecond = if (nativeElapsedMs > 0L) {
+                                audioDurationMs.toDouble() / nativeElapsedMs.toDouble()
+                            } else {
+                                null
+                            },
+                        ),
                     )
                 } finally {
                     progressChannel.close()
@@ -149,6 +207,13 @@ internal class WhisperTranscriptionEngineLocalDataSource @Inject constructor(
             Timber.tag(TAG).e(throwable, "Transcription failed")
         }
     }
+
+    private suspend fun readAudioData(request: TranscriptionRequest): FloatArray =
+        audioSampleReader.read16kMonoFloats(
+            wavFilePath = request.wavFilePath,
+            startMs = request.startMs,
+            endMs = request.endMs,
+        ).getOrThrow()
 
     private fun resolveLanguage(languageHint: LanguageHint): String? = when (languageHint) {
         LanguageHint.Auto -> "auto"

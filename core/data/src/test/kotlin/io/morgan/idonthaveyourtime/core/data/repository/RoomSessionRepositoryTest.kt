@@ -9,7 +9,9 @@ import io.morgan.idonthaveyourtime.core.database.model.SessionEntity
 import io.morgan.idonthaveyourtime.core.database.model.TranscriptSegmentEntity
 import io.morgan.idonthaveyourtime.core.model.ProcessingSession
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
+import io.morgan.idonthaveyourtime.core.model.SessionTranscriptionDiagnostics
 import io.morgan.idonthaveyourtime.core.model.Summary
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import io.morgan.idonthaveyourtime.core.model.Transcript
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,6 +76,37 @@ class RoomSessionRepositoryTest {
         assertThat(saved?.summary).isNull()
     }
 
+    @Test
+    fun `setTranscriptionDiagnostics stores and exposes diagnostics`() = runTest {
+        val repository = RoomSessionRepository(FakeSessionDao(), FakeTranscriptSegmentDao(), FakeChunkSummaryDao())
+        repository.createSession(baseSession(id = "s4"), "/tmp/import.ogg").getOrThrow()
+
+        repository.setTranscriptionDiagnostics(
+            sessionId = "s4",
+            diagnostics = baseDiagnostics(),
+        ).getOrThrow()
+
+        val saved = repository.getSession("s4")
+        assertThat(saved?.transcriptionDiagnostics).isEqualTo(baseDiagnostics())
+    }
+
+    @Test
+    fun `setError preserves existing transcription diagnostics`() = runTest {
+        val repository = RoomSessionRepository(FakeSessionDao(), FakeTranscriptSegmentDao(), FakeChunkSummaryDao())
+        repository.createSession(baseSession(id = "s5"), "/tmp/import.ogg").getOrThrow()
+        repository.setTranscriptionDiagnostics("s5", baseDiagnostics()).getOrThrow()
+
+        repository.setError(
+            sessionId = "s5",
+            errorCode = "TRANSCRIPTION_FAILED",
+            errorMessage = "boom",
+        ).getOrThrow()
+
+        val saved = repository.getSession("s5")
+        assertThat(saved?.stage).isEqualTo(ProcessingStage.Error)
+        assertThat(saved?.transcriptionDiagnostics).isEqualTo(baseDiagnostics())
+    }
+
     private fun baseSession(id: String) = ProcessingSession(
         id = id,
         createdAtEpochMs = 1L,
@@ -87,6 +120,21 @@ class RoomSessionRepositoryTest {
         languageCode = null,
         errorCode = null,
         errorMessage = null,
+    )
+
+    private fun baseDiagnostics() = SessionTranscriptionDiagnostics(
+        runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+        backendName = "GPU",
+        modelFileName = "gemma-4-E2B-it.litertlm",
+        warmStart = false,
+        modelLoadMs = 120L,
+        firstTextMs = 35L,
+        totalMs = 640L,
+        audioDurationMs = 4_000L,
+        audioSecondsPerWallSecond = 6.25,
+        fallbackReason = null,
+        failureReason = null,
+        deviceLabel = "Test Device",
     )
 }
 
@@ -132,6 +180,40 @@ private class FakeSessionDao : SessionDao {
             sessionId to existing.copy(
                 transcript = transcript,
                 languageCode = languageCode,
+            )
+        )
+    }
+
+    override suspend fun updateTranscriptionDiagnostics(
+        sessionId: String,
+        runtime: String,
+        backendName: String?,
+        modelFileName: String?,
+        warmStart: Boolean,
+        modelLoadMs: Long?,
+        firstTextMs: Long?,
+        totalMs: Long,
+        audioDurationMs: Long,
+        audioSecondsPerWallSecond: Double?,
+        fallbackReason: String?,
+        failureReason: String?,
+        deviceLabel: String?,
+    ) {
+        val existing = sessions.value[sessionId] ?: return
+        sessions.value = sessions.value + (
+            sessionId to existing.copy(
+                transcriptionRuntime = runtime,
+                transcriptionBackendName = backendName,
+                transcriptionModelFileName = modelFileName,
+                transcriptionWarmStart = warmStart,
+                transcriptionModelLoadMs = modelLoadMs,
+                transcriptionFirstTextMs = firstTextMs,
+                transcriptionTotalMs = totalMs,
+                transcriptionAudioDurationMs = audioDurationMs,
+                transcriptionAudioSecondsPerWallSecond = audioSecondsPerWallSecond,
+                transcriptionFallbackReason = fallbackReason,
+                transcriptionFailureReason = failureReason,
+                transcriptionDeviceLabel = deviceLabel,
             )
         )
     }

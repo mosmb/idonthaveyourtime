@@ -1,4 +1,4 @@
-package io.morgan.idonthaveyourtime.core.whisper
+package io.morgan.idonthaveyourtime.core.audio
 
 import io.morgan.idonthaveyourtime.core.common.ProcessingException
 import java.io.Closeable
@@ -61,19 +61,60 @@ class WavSegmentReader(
                 val sample = ((hi shl 8) or lo).toShort()
                 result[outIndex] = (sample / 32768.0f).coerceIn(-1f, 1f)
                 outIndex += 1
-                offset += 2
+                offset += BYTES_PER_SAMPLE
             }
         }
 
-        return if (outIndex == sampleCount) {
-            result
-        } else {
-            result.copyOf(outIndex)
-        }
+        return if (outIndex == sampleCount) result else result.copyOf(outIndex)
+    }
+
+    fun readWavBytes(startMs: Long, endMs: Long): ByteArray {
+        val pcmBytes = readPcm16Bytes(startMs = startMs, endMs = endMs)
+        return buildWavBytes(
+            pcmData = pcmBytes,
+            sampleRate = info.sampleRate,
+            channels = info.channels,
+            bitsPerSample = info.bitsPerSample,
+        )
     }
 
     override fun close() {
         raf.close()
+    }
+
+    private fun readPcm16Bytes(startMs: Long, endMs: Long): ByteArray {
+        val clampedStartMs = startMs.coerceIn(0L, durationMs)
+        val clampedEndMs = endMs.coerceIn(0L, durationMs)
+        if (clampedEndMs <= clampedStartMs) {
+            return ByteArray(0)
+        }
+
+        val startSample = ((clampedStartMs.toDouble() / 1000.0) * info.sampleRate.toDouble()).toLong()
+        val endSampleExclusive = ceil(((clampedEndMs.toDouble() / 1000.0) * info.sampleRate.toDouble())).toLong()
+        val sampleCountLong = max(0L, endSampleExclusive - startSample)
+        if (sampleCountLong <= 0L) {
+            return ByteArray(0)
+        }
+
+        val sampleCount = sampleCountLong.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        val result = ByteArray(sampleCount * BYTES_PER_SAMPLE)
+
+        val startByteOffset = info.dataOffsetBytes + startSample * BYTES_PER_SAMPLE.toLong()
+        raf.seek(startByteOffset)
+
+        val readBuffer = ByteArray(min(MAX_READ_BYTES, result.size))
+        var outIndex = 0
+        while (outIndex < result.size) {
+            val bytesToRead = min(result.size - outIndex, readBuffer.size)
+            val bytesRead = raf.read(readBuffer, 0, bytesToRead)
+            if (bytesRead <= 0) {
+                break
+            }
+            System.arraycopy(readBuffer, 0, result, outIndex, bytesRead)
+            outIndex += bytesRead
+        }
+
+        return if (outIndex == result.size) result else result.copyOf(outIndex)
     }
 
     private data class WavInfo(
@@ -120,8 +161,8 @@ class WavSegmentReader(
                     audioFormat = (bb.short.toInt() and 0xFFFF)
                     channels = (bb.short.toInt() and 0xFFFF)
                     sampleRate = bb.int
-                    bb.int // byteRate
-                    bb.short // blockAlign
+                    bb.int
+                    bb.short
                     bitsPerSample = (bb.short.toInt() and 0xFFFF)
                     raf.seek(chunkDataStart + chunkSize + (chunkSize % 2))
                 }
@@ -160,9 +201,36 @@ class WavSegmentReader(
         )
     }
 
+    private fun buildWavBytes(
+        pcmData: ByteArray,
+        sampleRate: Int,
+        channels: Int,
+        bitsPerSample: Int,
+    ): ByteArray {
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        val blockAlign = channels * bitsPerSample / 8
+        val fileSize = 36 + pcmData.size
+
+        val buffer = ByteBuffer.allocate(44 + pcmData.size).order(ByteOrder.LITTLE_ENDIAN)
+        buffer.put("RIFF".toByteArray())
+        buffer.putInt(fileSize)
+        buffer.put("WAVE".toByteArray())
+        buffer.put("fmt ".toByteArray())
+        buffer.putInt(16)
+        buffer.putShort(1)
+        buffer.putShort(channels.toShort())
+        buffer.putInt(sampleRate)
+        buffer.putInt(byteRate)
+        buffer.putShort(blockAlign.toShort())
+        buffer.putShort(bitsPerSample.toShort())
+        buffer.put("data".toByteArray())
+        buffer.putInt(pcmData.size)
+        buffer.put(pcmData)
+        return buffer.array()
+    }
+
     private companion object {
         const val BYTES_PER_SAMPLE = 2
         const val MAX_READ_BYTES = 256 * 1024
     }
 }
-

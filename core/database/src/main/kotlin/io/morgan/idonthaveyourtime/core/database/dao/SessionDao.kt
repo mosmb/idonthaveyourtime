@@ -41,6 +41,40 @@ interface SessionDao {
         languageCode: String?,
     )
 
+    @Query(
+        """
+        UPDATE processing_sessions
+        SET transcription_runtime = :runtime,
+            transcription_backend_name = :backendName,
+            transcription_model_file_name = :modelFileName,
+            transcription_warm_start = :warmStart,
+            transcription_model_load_ms = :modelLoadMs,
+            transcription_first_text_ms = :firstTextMs,
+            transcription_total_ms = :totalMs,
+            transcription_audio_duration_ms = :audioDurationMs,
+            transcription_audio_seconds_per_wall_second = :audioSecondsPerWallSecond,
+            transcription_fallback_reason = :fallbackReason,
+            transcription_failure_reason = :failureReason,
+            transcription_device_label = :deviceLabel
+        WHERE id = :sessionId
+        """
+    )
+    suspend fun updateTranscriptionDiagnostics(
+        sessionId: String,
+        runtime: String,
+        backendName: String?,
+        modelFileName: String?,
+        warmStart: Boolean,
+        modelLoadMs: Long?,
+        firstTextMs: Long?,
+        totalMs: Long,
+        audioDurationMs: Long,
+        audioSecondsPerWallSecond: Double?,
+        fallbackReason: String?,
+        failureReason: String?,
+        deviceLabel: String?,
+    )
+
     @Query("UPDATE processing_sessions SET summary = :summary WHERE id = :sessionId")
     suspend fun updateSummary(sessionId: String, summary: String)
 

@@ -11,6 +11,7 @@ import io.morgan.idonthaveyourtime.core.domain.repository.SessionRepository
 import io.morgan.idonthaveyourtime.core.model.ChunkSummary
 import io.morgan.idonthaveyourtime.core.model.ProcessingSession
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
+import io.morgan.idonthaveyourtime.core.model.SessionTranscriptionDiagnostics
 import io.morgan.idonthaveyourtime.core.model.Summary
 import io.morgan.idonthaveyourtime.core.model.Transcript
 import io.morgan.idonthaveyourtime.core.model.TranscriptSegment
@@ -94,6 +95,37 @@ internal class RoomSessionRepository @Inject constructor(
         }.onFailure { throwable ->
             Timber.tag(TAG).e(throwable, "Session transcript update failed id=%s", sessionId)
         }
+
+    override suspend fun setTranscriptionDiagnostics(
+        sessionId: String,
+        diagnostics: SessionTranscriptionDiagnostics,
+    ): Result<Unit> = runCatching {
+        Timber.tag(TAG).i(
+            "Session transcription diagnostics id=%s runtime=%s backend=%s totalMs=%d fallback=%s",
+            sessionId,
+            diagnostics.runtime,
+            diagnostics.backendName,
+            diagnostics.totalMs,
+            diagnostics.fallbackReason,
+        )
+        sessionDao.updateTranscriptionDiagnostics(
+            sessionId = sessionId,
+            runtime = diagnostics.runtime.name,
+            backendName = diagnostics.backendName,
+            modelFileName = diagnostics.modelFileName,
+            warmStart = diagnostics.warmStart,
+            modelLoadMs = diagnostics.modelLoadMs,
+            firstTextMs = diagnostics.firstTextMs,
+            totalMs = diagnostics.totalMs,
+            audioDurationMs = diagnostics.audioDurationMs,
+            audioSecondsPerWallSecond = diagnostics.audioSecondsPerWallSecond,
+            fallbackReason = diagnostics.fallbackReason,
+            failureReason = diagnostics.failureReason,
+            deviceLabel = diagnostics.deviceLabel,
+        )
+    }.onFailure { throwable ->
+        Timber.tag(TAG).e(throwable, "Session diagnostics update failed id=%s", sessionId)
+    }
 
     override suspend fun upsertTranscriptSegment(sessionId: String, index: Int, segment: TranscriptSegment): Result<Unit> =
         runCatching {

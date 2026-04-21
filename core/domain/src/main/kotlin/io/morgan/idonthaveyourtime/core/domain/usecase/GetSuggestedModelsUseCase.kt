@@ -2,12 +2,53 @@ package io.morgan.idonthaveyourtime.core.domain.usecase
 
 import io.morgan.idonthaveyourtime.core.model.ModelId
 import io.morgan.idonthaveyourtime.core.model.SuggestedModel
+import io.morgan.idonthaveyourtime.core.model.TranscriptionModelFormat
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import io.morgan.idonthaveyourtime.core.model.SummarizerModelFormat
 import io.morgan.idonthaveyourtime.core.model.SummarizerRuntime
 import javax.inject.Inject
 
 class GetSuggestedModelsUseCase @Inject constructor() {
     operator fun invoke(modelId: ModelId): List<SuggestedModel> = when (modelId) {
+        ModelId.Transcription -> listOf(
+            SuggestedModel(
+                modelId = ModelId.Transcription,
+                displayName = "Gemma 4 E2B IT",
+                description = "Current Google AI Edge Gallery default for Audio Scribe. Audio-capable LiteRT-LM path.",
+                huggingFaceRepoId = "litert-community/gemma-4-E2B-it-litert-lm",
+                fileName = "gemma-4-E2B-it.litertlm",
+                transcriptionRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                transcriptionModelFormat = TranscriptionModelFormat.LiteRtLm,
+            ),
+            SuggestedModel(
+                modelId = ModelId.Transcription,
+                displayName = "Gemma 4 E4B IT",
+                description = "Higher-quality Google AI Edge transcription model. Heavier memory footprint.",
+                huggingFaceRepoId = "litert-community/gemma-4-E4B-it-litert-lm",
+                fileName = "gemma-4-E4B-it.litertlm",
+                transcriptionRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                transcriptionModelFormat = TranscriptionModelFormat.LiteRtLm,
+            ),
+            SuggestedModel(
+                modelId = ModelId.Transcription,
+                displayName = "Gemma 3n E2B IT",
+                description = "Gallery-proven audio-capable Gemma 3n model for on-device transcription.",
+                huggingFaceRepoId = "google/gemma-3n-E2B-it-litert-lm",
+                fileName = "gemma-3n-E2B-it-int4.litertlm",
+                transcriptionRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                transcriptionModelFormat = TranscriptionModelFormat.LiteRtLm,
+            ),
+            SuggestedModel(
+                modelId = ModelId.Transcription,
+                displayName = "Gemma 3n E4B IT",
+                description = "Higher-quality Gemma 3n audio model. Larger download and memory use.",
+                huggingFaceRepoId = "google/gemma-3n-E4B-it-litert-lm",
+                fileName = "gemma-3n-E4B-it-int4.litertlm",
+                transcriptionRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                transcriptionModelFormat = TranscriptionModelFormat.LiteRtLm,
+            ),
+        )
+
         ModelId.Whisper -> listOf(
             SuggestedModel(
                 modelId = ModelId.Whisper,

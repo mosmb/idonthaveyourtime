@@ -3,6 +3,7 @@ package io.morgan.idonthaveyourtime.core.domain.repository
 import io.morgan.idonthaveyourtime.core.model.ChunkSummary
 import io.morgan.idonthaveyourtime.core.model.ProcessingSession
 import io.morgan.idonthaveyourtime.core.model.ProcessingStage
+import io.morgan.idonthaveyourtime.core.model.SessionTranscriptionDiagnostics
 import io.morgan.idonthaveyourtime.core.model.Summary
 import io.morgan.idonthaveyourtime.core.model.Transcript
 import io.morgan.idonthaveyourtime.core.model.TranscriptSegment
@@ -23,6 +24,10 @@ interface SessionRepository {
     suspend fun updateStage(sessionId: String, stage: ProcessingStage, progress: Float = 0f): Result<Unit>
     suspend fun setWavFilePath(sessionId: String, wavFilePath: String): Result<Unit>
     suspend fun setTranscript(sessionId: String, transcript: Transcript): Result<Unit>
+    suspend fun setTranscriptionDiagnostics(
+        sessionId: String,
+        diagnostics: SessionTranscriptionDiagnostics,
+    ): Result<Unit>
     suspend fun upsertTranscriptSegment(sessionId: String, index: Int, segment: TranscriptSegment): Result<Unit>
     suspend fun upsertChunkSummary(sessionId: String, chunk: ChunkSummary): Result<Unit>
     suspend fun setSummaryPartial(sessionId: String, summaryText: String): Result<Unit>

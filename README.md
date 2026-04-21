@@ -17,7 +17,8 @@ Offline/on-device Android app that receives shared audio files (`ACTION_SEND` / 
 - **Share-to-summarize**: process single or multiple audio files from Android Sharesheet
 - **Offline pipeline**: conversion → transcription → summarization (all on-device)
 - **No FFmpeg dependency**: MediaCodec-based conversion
-- **Whisper transcription**: `whisper.cpp` via JNI
+- **Google-first transcription**: Google AI Edge LiteRT-LM audio transcription on-device
+- **Explicit transcription fallback**: `whisper.cpp` stays available only when the Google path cannot run
 - **Latency-first summarization runtimes**:
   - LiteRT-LM for `.litertlm` assets
   - MediaPipe LLM Inference for `.task` assets
@@ -41,7 +42,8 @@ Offline/on-device Android app that receives shared audio files (`ACTION_SEND` / 
 - Room (local persistence)
 - HuggingFace model download (WorkManager)
 - MediaCodec-based conversion
-- Whisper JNI (`whisper.cpp` submodule)
+- Google AI Edge LiteRT-LM audio runtime (`com.google.ai.edge.litertlm:litertlm-android`)
+- Whisper JNI fallback (`whisper.cpp` submodule)
 - LiteRT-LM Android runtime (`com.google.ai.edge.litertlm:litertlm-android`)
 - MediaPipe LLM Inference (`com.google.mediapipe:tasks-genai`)
 - llama.cpp JNI fallback for GGUF summaries
@@ -99,12 +101,21 @@ The app can:
 - download suggested models from HuggingFace (requires INTERNET)
 - import local model files (copied into context.filesDir/models/)
 
+Supported transcription model formats:
+- `.litertlm` -> Google AI Edge LiteRT-LM primary path
+- `.bin` -> `whisper.cpp` fallback path
+
 Supported summarizer model formats:
 - `.litertlm` -> LiteRT-LM
 - `.task` -> MediaPipe LLM Inference
 - `.gguf` -> llama.cpp fallback
 
-Runtime selection:
+Transcription runtime selection:
+- `Auto` prefers Google AI Edge LiteRT-LM for `.litertlm` transcription models.
+- `WhisperCpp` is fallback-only and is intended for `.bin` models.
+- The app persists the runtime/backend it actually used, plus fallback reason and timing data, with each session.
+
+Summarizer runtime selection:
 - `Auto` prefers the model-format-matching runtime.
 - `.litertlm` selects LiteRT-LM.
 - `.task` selects MediaPipe LLM Inference.
@@ -113,7 +124,21 @@ Runtime selection:
 
 ### Suggested models
 
-Whisper (transcription) from ggerganov/whisper.cpp:
+Transcription, preferred Google AI Edge path:
+- gemma-4-E2B-it.litertlm
+  Source: `litert-community/gemma-4-E2B-it-litert-lm`
+  Runtime: Google AI Edge LiteRT-LM
+- gemma-4-E4B-it.litertlm
+  Source: `litert-community/gemma-4-E4B-it-litert-lm`
+  Runtime: Google AI Edge LiteRT-LM
+- gemma-3n-E2B-it-int4.litertlm
+  Source: `google/gemma-3n-E2B-it-litert-lm`
+  Runtime: Google AI Edge LiteRT-LM
+- gemma-3n-E4B-it-int4.litertlm
+  Source: `google/gemma-3n-E4B-it-litert-lm`
+  Runtime: Google AI Edge LiteRT-LM
+
+Whisper fallback from ggerganov/whisper.cpp:
 - ggml-base-q5_1.bin
 - ggml-base.en-q5_1.bin
 - ggml-small-q5_1.bin
@@ -147,10 +172,15 @@ For local installs, you can bundle model files by placing them under:
 
 At runtime, bundled assets are extracted into context.filesDir/models/ on first use.
 
-Note: “Summarizer (LLM)” availability is tied to the selected llmModelFileName
-(default: gemma-4-E2B-it.litertlm). If you bundle a different `.litertlm`,
-`.task`, or `.gguf` file, select it in the summarize settings so the correct
-runtime and file become Ready.
+Notes:
+- “Transcription (Google AI Edge)” availability is tied to the selected `transcriptionModelFileName`
+  (default: `gemma-4-E2B-it.litertlm`). If you import or bundle a different `.litertlm`
+  file, select it in the summarize settings so the correct transcription runtime becomes Ready.
+- “Summarizer (LLM)” availability is tied to the selected `llmModelFileName`
+  (default: `gemma-4-E2B-it.litertlm`). If you bundle a different `.litertlm`,
+  `.task`, or `.gguf` file, select it in the summarize settings so the correct
+  runtime and file become Ready.
+- Whisper fallback models are optional. They are not required for the default Google transcription path.
 
 ### Summarizer runtime notes
 
@@ -161,6 +191,16 @@ runtime and file become Ready.
   - `LiteRT-LM`
   - `MediaPipe LLM Inference`
   - `llama.cpp`
+
+## 🧪 Verification
+
+Recommended local verification commands:
+- `./gradlew :core:data:testDebugUnitTest --tests "*RoutingTranscriptionEngineLocalDataSourceTest" --tests "*RoomSessionRepositoryTest"`
+- `./gradlew :core:domain:test --tests "*ProcessSessionUseCaseTest" --tests "*CancelSessionUseCaseTest"`
+- `./gradlew :feature:summarize:impl:testDebugUnitTest --tests "*SummarizeViewModelTest"`
+- `./gradlew :app:compileDebugAndroidTestKotlin`
+
+Connected Google-AI-Edge instrumentation coverage now expects a real transcription `.litertlm` model to be present in app storage or bundled assets. The repository currently does not bundle one by default, so the E2E and benchmark instrumentation tests will skip until that asset is supplied.
 
 ## 🔐 Privacy
 - Pipeline processing is local (import/conversion/transcription/summarization on-device).

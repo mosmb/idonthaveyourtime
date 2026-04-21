@@ -6,7 +6,9 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import io.morgan.idonthaveyourtime.core.audio.EnergyVadSpeechSegmenterLocalDataSource
 import io.morgan.idonthaveyourtime.core.audio.MediaCodecAudioConverterLocalDataSource
+import io.morgan.idonthaveyourtime.core.audio.WavAudioSampleReaderLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.audio.AudioConverterLocalDataSource
+import io.morgan.idonthaveyourtime.core.data.datasource.audio.AudioSampleReaderLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.audio.SpeechSegmenterLocalDataSource
 import javax.inject.Singleton
 
@@ -21,5 +23,8 @@ internal abstract class AudioDataSourceModule {
     @Binds
     @Singleton
     abstract fun bindSpeechSegmenter(impl: EnergyVadSpeechSegmenterLocalDataSource): SpeechSegmenterLocalDataSource
-}
 
+    @Binds
+    @Singleton
+    abstract fun bindAudioSampleReader(impl: WavAudioSampleReaderLocalDataSource): AudioSampleReaderLocalDataSource
+}

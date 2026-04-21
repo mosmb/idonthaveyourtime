@@ -1,18 +1,20 @@
 package io.morgan.idonthaveyourtime.core.domain.repository
 
 import io.morgan.idonthaveyourtime.core.model.LanguageHint
-import io.morgan.idonthaveyourtime.core.model.Transcript
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRequest
+import io.morgan.idonthaveyourtime.core.model.TranscriptionResult
+import io.morgan.idonthaveyourtime.core.model.TranscriptionEngineProbeResult
 
 /**
- * Runs local speech-to-text transcription over audio samples.
- *
- * The input is expected to be normalized mono PCM samples (typically 16kHz), but concrete details
- * are up to the implementation.
+ * Runs local speech-to-text transcription.
  */
 interface TranscriptionRepository {
+    suspend fun probe(): Result<TranscriptionEngineProbeResult>
+
     suspend fun transcribe(
-        audioData: FloatArray,
+        request: TranscriptionRequest,
         languageHint: LanguageHint = LanguageHint.Auto,
         onProgress: suspend (Float) -> Unit = {},
-    ): Result<Transcript>
+        onPartialResult: suspend (String) -> Unit = {},
+    ): Result<TranscriptionResult>
 }
