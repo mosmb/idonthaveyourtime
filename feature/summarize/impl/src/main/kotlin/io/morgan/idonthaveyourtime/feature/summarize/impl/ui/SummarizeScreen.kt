@@ -1074,6 +1074,15 @@ private fun previewUiState(): SummarizeUiState {
     val suggestedModels = listOf(
         SuggestedModel(
             modelId = ModelId.Llm,
+            displayName = "Gemma 4 E4B IT",
+            description = "Larger LiteRT-LM model",
+            huggingFaceRepoId = "litert-community/gemma-4-E4B-it-litert-lm",
+            fileName = "gemma-4-E4B-it.litertlm",
+            summarizerRuntime = SummarizerRuntime.LiteRtLm,
+            summarizerModelFormat = SummarizerModelFormat.LiteRtLm,
+        ),
+        SuggestedModel(
+            modelId = ModelId.Llm,
             displayName = "Gemma 4 E2B IT",
             description = "Preferred LiteRT-LM path",
             huggingFaceRepoId = "litert-community/gemma-4-E2B-it-litert-lm",

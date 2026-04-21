@@ -120,6 +120,9 @@ Whisper (transcription) from ggerganov/whisper.cpp:
 - ggml-small.en-q5_1.bin
 
 LLM (summarization), preferred Google-backed paths first:
+- gemma-4-E4B-it.litertlm
+  Source: `litert-community/gemma-4-E4B-it-litert-lm`
+  Runtime: LiteRT-LM
 - gemma-4-E2B-it.litertlm
   Source: `litert-community/gemma-4-E2B-it-litert-lm`
   Runtime: LiteRT-LM

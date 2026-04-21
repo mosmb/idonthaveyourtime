@@ -42,6 +42,15 @@ class GetSuggestedModelsUseCase @Inject constructor() {
         ModelId.Llm -> listOf(
             SuggestedModel(
                 modelId = ModelId.Llm,
+                displayName = "Gemma 4 E4B IT",
+                description = "Gallery-aligned LiteRT-LM option with higher quality than E2B. Larger download and heavier memory use.",
+                huggingFaceRepoId = "litert-community/gemma-4-E4B-it-litert-lm",
+                fileName = "gemma-4-E4B-it.litertlm",
+                summarizerRuntime = SummarizerRuntime.LiteRtLm,
+                summarizerModelFormat = SummarizerModelFormat.LiteRtLm,
+            ),
+            SuggestedModel(
+                modelId = ModelId.Llm,
                 displayName = "Gemma 4 E2B IT",
                 description = "Preferred LiteRT-LM path. Google AI Edge runtime, streamed partials, accelerator-first.",
                 huggingFaceRepoId = "litert-community/gemma-4-E2B-it-litert-lm",
