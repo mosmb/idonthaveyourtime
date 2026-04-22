@@ -107,6 +107,51 @@ class RoomSessionRepositoryTest {
         assertThat(saved?.transcriptionDiagnostics).isEqualTo(baseDiagnostics())
     }
 
+    @Test
+    fun `legacy whisper transcription diagnostics rows remain readable after upgrade`() = runTest {
+        val sessionDao = FakeSessionDao()
+        sessionDao.upsert(
+            SessionEntity(
+                id = "legacy-whisper",
+                createdAtEpochMs = 1L,
+                sourceName = "voice.ogg",
+                mimeType = "audio/ogg",
+                durationMs = null,
+                stage = ProcessingStage.Success.name,
+                progress = 1f,
+                transcript = "legacy transcript",
+                summary = "legacy summary",
+                languageCode = "en",
+                errorCode = null,
+                errorMessage = null,
+                transcriptionRuntime = "WhisperCpp",
+                transcriptionBackendName = null,
+                transcriptionModelFileName = "ggml-base-q5_1.bin",
+                transcriptionWarmStart = true,
+                transcriptionModelLoadMs = 42L,
+                transcriptionFirstTextMs = 21L,
+                transcriptionTotalMs = 500L,
+                transcriptionAudioDurationMs = 4_000L,
+                transcriptionAudioSecondsPerWallSecond = 8.0,
+                transcriptionFallbackReason = null,
+                transcriptionFailureReason = null,
+                transcriptionDeviceLabel = "Legacy Device",
+                inputFilePath = "/tmp/import.ogg",
+                wavFilePath = "/tmp/converted.wav",
+            ),
+        )
+        val repository = RoomSessionRepository(sessionDao, FakeTranscriptSegmentDao(), FakeChunkSummaryDao())
+
+        val saved = repository.getSession("legacy-whisper")
+
+        assertThat(saved?.transcriptionDiagnostics).isNotNull()
+        assertThat(saved?.transcriptionDiagnostics?.runtime).isEqualTo(TranscriptionRuntime.Auto)
+        assertThat(saved?.transcriptionDiagnostics?.backendName).isEqualTo("whisper.cpp (legacy)")
+        assertThat(saved?.transcriptionDiagnostics?.modelFileName).isEqualTo("ggml-base-q5_1.bin")
+        assertThat(saved?.transcriptionDiagnostics?.totalMs).isEqualTo(500L)
+        assertThat(saved?.transcriptionDiagnostics?.audioDurationMs).isEqualTo(4_000L)
+    }
+
     private fun baseSession(id: String) = ProcessingSession(
         id = id,
         createdAtEpochMs = 1L,

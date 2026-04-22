@@ -32,15 +32,14 @@ class DownloadModelWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         val modelIdRaw = inputData.getString(KEY_MODEL_ID)
-            ?: return failure("Missing model id")
-        val displayName = inputData.getString(KEY_DISPLAY_NAME) ?: modelIdRaw
+        val modelId = resolveSupportedDownloadModelId(modelIdRaw)
+            .getOrElse { throwable -> return failure(throwable.message ?: "Unsupported model id") }
+        val displayName = inputData.getString(KEY_DISPLAY_NAME) ?: modelId.name
         val url = inputData.getString(KEY_URL)
             ?: return failure("Missing download url")
         val targetFileName = inputData.getString(KEY_TARGET_FILE_NAME)
             ?: return failure("Missing target file name")
-
-        val modelId = runCatching { ModelId.valueOf(modelIdRaw) }.getOrNull()
-        val notificationId = BASE_NOTIFICATION_ID + ((modelId?.ordinal ?: modelIdRaw.hashCode().absoluteValue) % 1000)
+        val notificationId = BASE_NOTIFICATION_ID + (modelId.ordinal % 1000)
 
         setForeground(createForegroundInfo(displayName, notificationId, progressPercent = null))
         setProgress(Data.Builder().putInt(KEY_PROGRESS_PERCENT, 0).build())
@@ -52,7 +51,7 @@ class DownloadModelWorker @AssistedInject constructor(
         return try {
             Timber.tag(TAG).i(
                 "Download start modelId=%s displayName=%s url=%s target=%s",
-                modelIdRaw,
+                modelId.name,
                 displayName,
                 url,
                 finalFile.absolutePath,
@@ -82,7 +81,7 @@ class DownloadModelWorker @AssistedInject constructor(
 
             Timber.tag(TAG).i(
                 "Download done modelId=%s path=%s sizeBytes=%d",
-                modelIdRaw,
+                modelId.name,
                 finalFile.absolutePath,
                 finalFile.length(),
             )
@@ -93,7 +92,7 @@ class DownloadModelWorker @AssistedInject constructor(
             throw cancelled
         } catch (throwable: Throwable) {
             tempFile.delete()
-            Timber.tag(TAG).e(throwable, "Download failed modelId=%s", modelIdRaw)
+            Timber.tag(TAG).e(throwable, "Download failed modelId=%s", modelId.name)
             failure(throwable.message ?: "Download failed")
         }
     }
@@ -219,4 +218,12 @@ class DownloadModelWorker @AssistedInject constructor(
         private const val CHANNEL_ID = "model_download_channel"
         private const val BASE_NOTIFICATION_ID = 2000
     }
+}
+
+internal fun resolveSupportedDownloadModelId(modelIdRaw: String?): Result<ModelId> = runCatching {
+    val rawModelId = modelIdRaw?.trim()?.takeIf { it.isNotEmpty() }
+        ?: throw IllegalArgumentException("Missing model id")
+
+    ModelId.entries.firstOrNull { modelId -> modelId.name == rawModelId }
+        ?: throw IllegalArgumentException("Unsupported model id: $rawModelId")
 }

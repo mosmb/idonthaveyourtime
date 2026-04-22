@@ -55,16 +55,16 @@ private fun String.toProcessingStage(): ProcessingStage =
     ProcessingStage.entries.firstOrNull { it.name == this } ?: ProcessingStage.Error
 
 private fun SessionEntity.asTranscriptionDiagnostics(): SessionTranscriptionDiagnostics? {
-    val runtime = transcriptionRuntime
-        ?.let { rawRuntime -> runCatching { TranscriptionRuntime.valueOf(rawRuntime) }.getOrNull() }
+    val runtimeCompatibility = transcriptionRuntime
+        ?.let(::resolveLegacyCompatibleRuntime)
         ?: return null
     val warmStart = transcriptionWarmStart ?: return null
     val totalMs = transcriptionTotalMs ?: return null
     val audioDurationMs = transcriptionAudioDurationMs ?: return null
 
     return SessionTranscriptionDiagnostics(
-        runtime = runtime,
-        backendName = transcriptionBackendName,
+        runtime = runtimeCompatibility.runtime,
+        backendName = transcriptionBackendName ?: runtimeCompatibility.backendName,
         modelFileName = transcriptionModelFileName,
         warmStart = warmStart,
         modelLoadMs = transcriptionModelLoadMs,
@@ -77,3 +77,28 @@ private fun SessionEntity.asTranscriptionDiagnostics(): SessionTranscriptionDiag
         deviceLabel = transcriptionDeviceLabel,
     )
 }
+
+private fun resolveLegacyCompatibleRuntime(rawRuntime: String): RuntimeCompatibility? =
+    when (rawRuntime) {
+        LEGACY_WHISPER_RUNTIME -> RuntimeCompatibility(
+            runtime = TranscriptionRuntime.Auto,
+            backendName = LEGACY_WHISPER_BACKEND_NAME,
+        )
+
+        else -> runCatching { TranscriptionRuntime.valueOf(rawRuntime) }
+            .getOrNull()
+            ?.let { runtime ->
+                RuntimeCompatibility(
+                    runtime = runtime,
+                    backendName = null,
+                )
+            }
+    }
+
+private data class RuntimeCompatibility(
+    val runtime: TranscriptionRuntime,
+    val backendName: String?,
+)
+
+private const val LEGACY_WHISPER_RUNTIME = "WhisperCpp"
+private const val LEGACY_WHISPER_BACKEND_NAME = "whisper.cpp (legacy)"
