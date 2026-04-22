@@ -49,37 +49,6 @@ class GetSuggestedModelsUseCase @Inject constructor() {
             ),
         )
 
-        ModelId.Whisper -> listOf(
-            SuggestedModel(
-                modelId = ModelId.Whisper,
-                displayName = "Whisper Base (multilingual, Q5_1)",
-                description = "Good default balance for transcription.",
-                huggingFaceRepoId = "ggerganov/whisper.cpp",
-                fileName = "ggml-base-q5_1.bin",
-            ),
-            SuggestedModel(
-                modelId = ModelId.Whisper,
-                displayName = "Whisper Base (English-only, Q5_1)",
-                description = "Smaller/faster if you only need English.",
-                huggingFaceRepoId = "ggerganov/whisper.cpp",
-                fileName = "ggml-base.en-q5_1.bin",
-            ),
-            SuggestedModel(
-                modelId = ModelId.Whisper,
-                displayName = "Whisper Small (multilingual, Q5_1)",
-                description = "Higher accuracy, heavier and slower.",
-                huggingFaceRepoId = "ggerganov/whisper.cpp",
-                fileName = "ggml-small-q5_1.bin",
-            ),
-            SuggestedModel(
-                modelId = ModelId.Whisper,
-                displayName = "Whisper Small (English-only, Q5_1)",
-                description = "Higher accuracy for English, heavier and slower.",
-                huggingFaceRepoId = "ggerganov/whisper.cpp",
-                fileName = "ggml-small.en-q5_1.bin",
-            ),
-        )
-
         ModelId.Llm -> listOf(
             SuggestedModel(
                 modelId = ModelId.Llm,

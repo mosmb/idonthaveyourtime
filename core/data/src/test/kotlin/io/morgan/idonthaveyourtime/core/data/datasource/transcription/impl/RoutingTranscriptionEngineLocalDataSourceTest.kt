@@ -21,6 +21,16 @@ import org.junit.Test
 class RoutingTranscriptionEngineLocalDataSourceTest {
 
     @Test
+    fun `transcription runtime does not expose whisper`() {
+        assertThat(TranscriptionRuntime.entries.map { it.name }.contains("WhisperCpp")).isFalse()
+        assertThat(
+            TranscriptionRuntime.entries.any { runtime ->
+                runtime.displayName.contains("whisper", ignoreCase = true)
+            },
+        ).isFalse()
+    }
+
+    @Test
     fun `probe auto selects Google AI Edge for litertlm transcription models`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
@@ -36,10 +46,6 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
                     runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                     supportedFormats = setOf(TranscriptionModelFormat.LiteRtLm),
                 ),
-                FakeTranscriptionEngine(
-                    runtime = TranscriptionRuntime.WhisperCpp,
-                    supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
-                ),
             ),
         )
 
@@ -52,7 +58,7 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
     }
 
     @Test
-    fun `probe falls back to whisper when Google transcription cannot open configured model`() = runTest {
+    fun `probe fails when auto cannot open configured litertlm model`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
                 transcriptionRuntime = TranscriptionRuntime.Auto,
@@ -60,25 +66,74 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
             ),
         )
 
+        val whisperRuntime = TranscriptionRuntime.entries.firstOrNull { runtime -> runtime.name == "WhisperCpp" }
+        val whisperFormat = TranscriptionModelFormat.entries.firstOrNull { format -> format.name == "WhisperBin" }
+
         val selector = RoutingTranscriptionEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(
-                FakeTranscriptionEngine(
-                    runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
-                    supportedFormats = emptySet(),
-                ),
-                FakeTranscriptionEngine(
-                    runtime = TranscriptionRuntime.WhisperCpp,
-                    supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
-                ),
-            ),
+            engines = buildSet {
+                add(
+                    FakeTranscriptionEngine(
+                        runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                        supportedFormats = emptySet(),
+                    ),
+                )
+                if (whisperRuntime != null && whisperFormat != null) {
+                    add(
+                        FakeTranscriptionEngine(
+                            runtime = whisperRuntime,
+                            supportedFormats = setOf(whisperFormat),
+                        ),
+                    )
+                }
+            },
         )
 
         val probe = selector.probe().getOrThrow()
 
-        assertThat(probe.supported).isTrue()
-        assertThat(probe.selectedRuntime).isEqualTo(TranscriptionRuntime.WhisperCpp)
-        assertThat(probe.fallbackReason).contains("Google AI Edge")
+        assertThat(probe.supported).isFalse()
+        assertThat(probe.selectedRuntime).isNull()
+        assertThat(probe.fallbackReason).isNull()
+    }
+
+    @Test
+    fun `probe fails fast for bin transcription models`() = runTest {
+        val configDataSource = FakeProcessingConfigLocalDataSource(
+            ProcessingConfig(
+                transcriptionRuntime = TranscriptionRuntime.Auto,
+                transcriptionModelFileName = "ggml-base-q5_1.bin",
+            ),
+        )
+
+        val whisperRuntime = TranscriptionRuntime.entries.firstOrNull { runtime -> runtime.name == "WhisperCpp" }
+        val whisperFormat = TranscriptionModelFormat.entries.firstOrNull { format -> format.name == "WhisperBin" }
+
+        val selector = RoutingTranscriptionEngineLocalDataSource(
+            processingConfigDataSource = configDataSource,
+            engines = buildSet {
+                add(
+                    FakeTranscriptionEngine(
+                        runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                        supportedFormats = emptySet(),
+                    ),
+                )
+                if (whisperRuntime != null && whisperFormat != null) {
+                    add(
+                        FakeTranscriptionEngine(
+                            runtime = whisperRuntime,
+                            supportedFormats = setOf(whisperFormat),
+                        ),
+                    )
+                }
+            },
+        )
+
+        val probe = selector.probe().getOrThrow()
+
+        assertThat(probe.supported).isFalse()
+        assertThat(probe.selectedRuntime).isNull()
+        assertThat(probe.modelFormat).isNull()
+        assertThat(probe.failureReason).contains("Unsupported transcription model format")
     }
 
     @Test
@@ -96,10 +151,6 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
                 FakeTranscriptionEngine(
                     runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                     supportedFormats = setOf(TranscriptionModelFormat.LiteRtLm),
-                ),
-                FakeTranscriptionEngine(
-                    runtime = TranscriptionRuntime.WhisperCpp,
-                    supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
                 ),
             ),
         )
@@ -125,15 +176,10 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
             supportedFormats = setOf(TranscriptionModelFormat.LiteRtLm),
             transcriptText = "google transcript",
         )
-        val whisper = FakeTranscriptionEngine(
-            runtime = TranscriptionRuntime.WhisperCpp,
-            supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
-            transcriptText = "whisper transcript",
-        )
 
         val selector = RoutingTranscriptionEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(google, whisper),
+            engines = setOf(google),
         )
 
         val request = TranscriptionRequest(
@@ -151,12 +197,11 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
 
         assertThat(result.transcript.text).isEqualTo("google transcript")
         assertThat(google.transcribeCalls).isEqualTo(1)
-        assertThat(whisper.transcribeCalls).isEqualTo(0)
         assertThat(google.recordedRequests.single()).isEqualTo(request)
     }
 
     @Test
-    fun `transcribe copies probe fallback reason into result metrics when Google cannot handle litertlm model`() = runTest {
+    fun `transcribe fails when auto cannot open configured litertlm model`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
                 transcriptionRuntime = TranscriptionRuntime.Auto,
@@ -167,15 +212,22 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
             runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
             supportedFormats = emptySet(),
         )
-        val whisper = FakeTranscriptionEngine(
-            runtime = TranscriptionRuntime.WhisperCpp,
-            supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
-            transcriptText = "whisper transcript",
-        )
+
+        val whisperRuntime = TranscriptionRuntime.entries.firstOrNull { runtime -> runtime.name == "WhisperCpp" }
+        val whisperFormat = TranscriptionModelFormat.entries.firstOrNull { format -> format.name == "WhisperBin" }
+        val whisper = if (whisperRuntime != null && whisperFormat != null) {
+            FakeTranscriptionEngine(
+                runtime = whisperRuntime,
+                supportedFormats = setOf(whisperFormat),
+                transcriptText = "whisper transcript",
+            )
+        } else {
+            null
+        }
 
         val selector = RoutingTranscriptionEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(google, whisper),
+            engines = setOfNotNull(google, whisper),
         )
 
         val request = TranscriptionRequest(
@@ -189,12 +241,9 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
             languageHint = LanguageHint.Fixed("en"),
             onProgress = {},
             onPartialResult = {},
-        ).getOrThrow()
+        )
 
-        assertThat(result.transcript.text).isEqualTo("whisper transcript")
-        assertThat(result.metrics.runtime).isEqualTo(TranscriptionRuntime.WhisperCpp)
-        assertThat(result.metrics.fallbackReason).contains("Google AI Edge")
-        assertThat(whisper.transcribeCalls).isEqualTo(1)
+        assertThat(result.isFailure).isTrue()
         assertThat(google.transcribeCalls).isEqualTo(0)
     }
 
@@ -228,7 +277,7 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
                 supportedFormats = supportedFormats,
                 supportsStreaming = runtime == TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                 supportsAsyncGeneration = runtime == TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
-                supportsHardwareAcceleration = runtime != TranscriptionRuntime.WhisperCpp,
+                supportsHardwareAcceleration = runtime.name != "WhisperCpp",
             )
 
         override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(

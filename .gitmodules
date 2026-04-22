@@ -1,6 +1,3 @@
-[submodule "core/whisper/src/main/cpp/third_party/whisper.cpp"]
-	path = core/whisper/src/main/cpp/third_party/whisper.cpp
-	url = https://github.com/ggml-org/whisper.cpp.git
 [submodule "core/llm/src/main/cpp/third_party/llama.cpp"]
 	path = core/llm/src/main/cpp/third_party/llama.cpp
 	url = https://github.com/ggml-org/llama.cpp.git

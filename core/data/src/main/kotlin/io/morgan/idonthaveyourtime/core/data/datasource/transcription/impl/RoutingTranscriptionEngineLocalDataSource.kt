@@ -146,17 +146,10 @@ internal class RoutingTranscriptionEngineLocalDataSource @Inject constructor(
         when (modelFormat) {
             TranscriptionModelFormat.LiteRtLm -> {
                 add(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
-                add(TranscriptionRuntime.WhisperCpp)
-            }
-
-            TranscriptionModelFormat.WhisperBin -> {
-                add(TranscriptionRuntime.WhisperCpp)
-                add(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
             }
 
             null -> {
                 add(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
-                add(TranscriptionRuntime.WhisperCpp)
             }
         }
     }.distinct()
@@ -168,7 +161,6 @@ internal class RoutingTranscriptionEngineLocalDataSource @Inject constructor(
     ): String? {
         val preferredRuntime = when (modelFormat) {
             TranscriptionModelFormat.LiteRtLm -> TranscriptionRuntime.GoogleAiEdgeLiteRtLm
-            TranscriptionModelFormat.WhisperBin -> TranscriptionRuntime.WhisperCpp
             null -> TranscriptionRuntime.GoogleAiEdgeLiteRtLm
         }
 
@@ -178,9 +170,6 @@ internal class RoutingTranscriptionEngineLocalDataSource @Inject constructor(
 
             requestedRuntime != TranscriptionRuntime.Auto && selectedRuntime != requestedRuntime ->
                 "Requested ${requestedRuntime.displayName}, but routed to ${selectedRuntime.displayName}."
-
-            requestedRuntime == TranscriptionRuntime.Auto && selectedRuntime == TranscriptionRuntime.WhisperCpp && modelFormat == TranscriptionModelFormat.LiteRtLm ->
-                "Google AI Edge LiteRT-LM was unavailable; using whisper.cpp fallback."
 
             else -> null
         }

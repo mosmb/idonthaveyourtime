@@ -218,7 +218,7 @@ class ProcessSessionUseCaseTest {
         assertThat(result.isSuccess).isTrue()
         assertThat(summarizer.mapCalls).isEqualTo(3)
         assertThat(repository.chunkSummaries.value).hasSize(3)
-        assertThat(repository.transcriptionDiagnostics?.runtime).isEqualTo(TranscriptionRuntime.WhisperCpp)
+        assertThat(repository.transcriptionDiagnostics?.runtime).isEqualTo(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
         assertThat(repository.transcriptionDiagnostics?.totalMs).isEqualTo(5_000L)
         assertThat(repository.transcriptionDiagnostics?.audioDurationMs).isEqualTo(5_000L)
     }
@@ -411,10 +411,10 @@ class ProcessSessionUseCaseTest {
     ) : TranscriptionRepository {
         override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(
             TranscriptionEngineProbeResult(
-                requestedRuntime = TranscriptionRuntime.WhisperCpp,
-                selectedRuntime = TranscriptionRuntime.WhisperCpp,
-                modelFormat = TranscriptionModelFormat.WhisperBin,
-                modelFileName = "fake.bin",
+                requestedRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                selectedRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                modelFormat = TranscriptionModelFormat.LiteRtLm,
+                modelFileName = "fake.litertlm",
                 supported = true,
                 supportsStreaming = false,
             ),
@@ -431,9 +431,9 @@ class ProcessSessionUseCaseTest {
             TranscriptionResult(
                 transcript = transcript,
                 metrics = TranscriptionMetrics(
-                    runtime = TranscriptionRuntime.WhisperCpp,
+                    runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                     backendName = "fake",
-                    modelFileName = "fake.bin",
+                    modelFileName = "fake.litertlm",
                     warmStart = true,
                     modelLoadMs = null,
                     firstTextMs = (request.endMs - request.startMs).coerceAtLeast(0L),
@@ -492,10 +492,10 @@ class ProcessSessionUseCaseTest {
 
         override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(
             TranscriptionEngineProbeResult(
-                requestedRuntime = TranscriptionRuntime.WhisperCpp,
-                selectedRuntime = TranscriptionRuntime.WhisperCpp,
-                modelFormat = TranscriptionModelFormat.WhisperBin,
-                modelFileName = "fake.bin",
+                requestedRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                selectedRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                modelFormat = TranscriptionModelFormat.LiteRtLm,
+                modelFileName = "fake.litertlm",
                 supported = true,
                 supportsStreaming = false,
             ),
@@ -514,9 +514,9 @@ class ProcessSessionUseCaseTest {
             TranscriptionResult(
                 transcript = Transcript(text = nextText, languageCode = languageCode),
                 metrics = TranscriptionMetrics(
-                    runtime = TranscriptionRuntime.WhisperCpp,
+                    runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                     backendName = "fake",
-                    modelFileName = "fake.bin",
+                    modelFileName = "fake.litertlm",
                     warmStart = true,
                     modelLoadMs = null,
                     firstTextMs = (request.endMs - request.startMs).coerceAtLeast(0L),
@@ -533,10 +533,10 @@ class ProcessSessionUseCaseTest {
     ) : TranscriptionRepository {
         override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(
             TranscriptionEngineProbeResult(
-                requestedRuntime = TranscriptionRuntime.WhisperCpp,
-                selectedRuntime = TranscriptionRuntime.WhisperCpp,
-                modelFormat = TranscriptionModelFormat.WhisperBin,
-                modelFileName = "fake.bin",
+                requestedRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                selectedRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
+                modelFormat = TranscriptionModelFormat.LiteRtLm,
+                modelFileName = "fake.litertlm",
                 supported = true,
                 supportsStreaming = false,
             ),

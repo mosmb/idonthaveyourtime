@@ -22,13 +22,7 @@
 
 # ---- JNI / native interop ----
 # JNI method names are derived from the class + method names, so these entrypoints must not be renamed/removed.
--keep class io.morgan.idonthaveyourtime.core.whisper.WhisperJni { *; }
 -keep class io.morgan.idonthaveyourtime.core.llm.LlamaJni { *; }
-
-# Native code looks up the callback method by name: GetMethodID("onProgress", "(I)V")
--keepclassmembers class io.morgan.idonthaveyourtime.core.whisper.ProgressCb {
-    void onProgress(int);
-}
 
 # Keep reflection-relevant metadata used by libraries like Retrofit.
 -keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod

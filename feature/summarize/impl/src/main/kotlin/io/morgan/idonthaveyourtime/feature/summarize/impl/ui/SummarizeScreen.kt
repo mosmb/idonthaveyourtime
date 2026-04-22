@@ -85,7 +85,6 @@ import io.morgan.idonthaveyourtime.core.model.SummarizerModelFormat
 import io.morgan.idonthaveyourtime.core.model.SummarizerRuntime
 import io.morgan.idonthaveyourtime.core.model.TranscriptionModelFormat
 import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
-import io.morgan.idonthaveyourtime.core.model.WhisperModelSize
 import io.morgan.idonthaveyourtime.feature.summarize.impl.R
 import io.morgan.idonthaveyourtime.feature.summarize.impl.SummarizeUiState
 import java.io.File
@@ -130,28 +129,6 @@ fun SummarizeScreen(
                     )
                 )
             )
-        },
-    )
-
-    val whisperImportLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-        onResult = { uri ->
-            if (uri == null) return@rememberLauncherForActivityResult
-            coroutineScope.launch {
-                importModelFile(
-                    context = context,
-                    uri = uri,
-                    allowedFileNames = WHISPER_FILE_NAMES,
-                    defaultFileName = defaultWhisperFileName(state.processingConfig),
-                ).fold(
-                    onSuccess = { fileName ->
-                        toastMessage = "Imported Whisper model as $fileName"
-                    },
-                    onFailure = { throwable ->
-                        toastMessage = throwable.message ?: "Unable to import Whisper model"
-                    },
-                )
-            }
         },
     )
 
@@ -238,10 +215,8 @@ fun SummarizeScreen(
         },
         onShareSummary = { summary -> shareText(context, summary) },
         onImportTranscriptionRequested = { transcriptionImportLauncher.launch(arrayOf("*/*")) },
-        onImportWhisperRequested = { whisperImportLauncher.launch(arrayOf("*/*")) },
         onImportLlmRequested = { llmImportLauncher.launch(arrayOf("*/*")) },
         onOpenTranscriptionDownloadPicker = { downloadDialogModelId = ModelId.Transcription },
-        onOpenWhisperDownloadPicker = { downloadDialogModelId = ModelId.Whisper },
         onOpenLlmDownloadPicker = { downloadDialogModelId = ModelId.Llm },
         onCancelDownloadRequested = onCancelDownload,
         onConfigChanged = onProcessingConfigChanged,
@@ -269,10 +244,8 @@ private fun SummarizeScreenContent(
     onCopySummary: (String) -> Unit,
     onShareSummary: (String) -> Unit,
     onImportTranscriptionRequested: () -> Unit,
-    onImportWhisperRequested: () -> Unit,
     onImportLlmRequested: () -> Unit,
     onOpenTranscriptionDownloadPicker: () -> Unit,
-    onOpenWhisperDownloadPicker: () -> Unit,
     onOpenLlmDownloadPicker: () -> Unit,
     onCancelDownloadRequested: (ModelId) -> Unit,
     onConfigChanged: (ProcessingConfig) -> Unit,
@@ -361,10 +334,8 @@ private fun SummarizeScreenContent(
                 SettingsSheetContent(
                     state = state,
                     onImportTranscriptionRequested = onImportTranscriptionRequested,
-                    onImportWhisperRequested = onImportWhisperRequested,
                     onImportLlmRequested = onImportLlmRequested,
                     onDownloadTranscriptionRequested = onOpenTranscriptionDownloadPicker,
-                    onDownloadWhisperRequested = onOpenWhisperDownloadPicker,
                     onDownloadLlmRequested = onOpenLlmDownloadPicker,
                     onCancelDownloadRequested = onCancelDownloadRequested,
                     onConfigChanged = onConfigChanged,
@@ -376,7 +347,6 @@ private fun SummarizeScreenContent(
                     modelId = modelId,
                     models = when (modelId) {
                         ModelId.Transcription -> state.transcriptionSuggestedModels
-                        ModelId.Whisper -> state.whisperSuggestedModels
                         ModelId.Llm -> state.llmSuggestedModels
                     },
                     onDismiss = onDismissDownloadDialog,
@@ -689,10 +659,8 @@ private fun HistoryRow(
 private fun SettingsSheetContent(
     state: SummarizeUiState,
     onImportTranscriptionRequested: () -> Unit,
-    onImportWhisperRequested: () -> Unit,
     onImportLlmRequested: () -> Unit,
     onDownloadTranscriptionRequested: () -> Unit,
-    onDownloadWhisperRequested: () -> Unit,
     onDownloadLlmRequested: () -> Unit,
     onCancelDownloadRequested: (ModelId) -> Unit,
     onConfigChanged: (ProcessingConfig) -> Unit,
@@ -717,14 +685,6 @@ private fun SettingsSheetContent(
                 onImportRequested = onImportTranscriptionRequested,
                 onDownloadRequested = onDownloadTranscriptionRequested,
                 onCancelDownloadRequested = { onCancelDownloadRequested(ModelId.Transcription) },
-            )
-            ModelRow(
-                label = stringResource(R.string.whisper_fallback_model),
-                availability = state.whisperAvailability,
-                selectedFileName = defaultWhisperFileName(config),
-                onImportRequested = onImportWhisperRequested,
-                onDownloadRequested = onDownloadWhisperRequested,
-                onCancelDownloadRequested = { onCancelDownloadRequested(ModelId.Whisper) },
             )
             ModelRow(
                 label = stringResource(R.string.llm_model),
@@ -906,7 +866,6 @@ private fun DownloadModelDialog(
 ) {
     val title = when (modelId) {
         ModelId.Transcription -> stringResource(R.string.download_transcription_title)
-        ModelId.Whisper -> stringResource(R.string.download_whisper_title)
         ModelId.Llm -> stringResource(R.string.download_llm_title)
     }
 
@@ -1043,20 +1002,17 @@ private enum class QualityPreset {
 }
 
 private fun qualityPresetFor(config: ProcessingConfig): QualityPreset? = when {
-    config.whisperModelSize == WhisperModelSize.Base &&
-        config.segmentationTargetSpeechMs == 20_000L &&
+    config.segmentationTargetSpeechMs == 20_000L &&
         config.segmentationOverlapMs == 300L &&
         config.mapEverySegments == 4 ->
         QualityPreset.Fast
 
-    config.whisperModelSize == WhisperModelSize.Base &&
-        config.segmentationTargetSpeechMs == 15_000L &&
+    config.segmentationTargetSpeechMs == 15_000L &&
         config.segmentationOverlapMs == 600L &&
         config.mapEverySegments == 3 ->
         QualityPreset.Balanced
 
-    config.whisperModelSize == WhisperModelSize.Small &&
-        config.segmentationTargetSpeechMs == 20_000L &&
+    config.segmentationTargetSpeechMs == 20_000L &&
         config.segmentationOverlapMs == 800L &&
         config.mapEverySegments == 2 ->
         QualityPreset.Quality
@@ -1066,21 +1022,18 @@ private fun qualityPresetFor(config: ProcessingConfig): QualityPreset? = when {
 
 private fun applyQualityPreset(config: ProcessingConfig, preset: QualityPreset): ProcessingConfig = when (preset) {
     QualityPreset.Fast -> config.copy(
-        whisperModelSize = WhisperModelSize.Base,
         segmentationTargetSpeechMs = 20_000L,
         segmentationOverlapMs = 300L,
         mapEverySegments = 4,
     )
 
     QualityPreset.Balanced -> config.copy(
-        whisperModelSize = WhisperModelSize.Base,
         segmentationTargetSpeechMs = 15_000L,
         segmentationOverlapMs = 600L,
         mapEverySegments = 3,
     )
 
     QualityPreset.Quality -> config.copy(
-        whisperModelSize = WhisperModelSize.Small,
         segmentationTargetSpeechMs = 20_000L,
         segmentationOverlapMs = 800L,
         mapEverySegments = 2,
@@ -1095,17 +1048,6 @@ private val processingStages = setOf(
     ProcessingStage.Summarizing,
 )
 
-private val WHISPER_FILE_NAMES = setOf(
-    "ggml-base-q5_1.bin",
-    "ggml-base.en-q5_1.bin",
-    "ggml-base.en.bin",
-    "ggml-base.bin",
-    "ggml-small-q5_1.bin",
-    "ggml-small.en-q5_1.bin",
-    "ggml-small.en.bin",
-    "ggml-small.bin",
-)
-
 private val LLM_FILE_EXTENSIONS = SummarizerModelFormat.entries
     .map { format -> format.fileExtension }
     .toSet()
@@ -1113,12 +1055,6 @@ private val LLM_FILE_EXTENSIONS = SummarizerModelFormat.entries
 private val TRANSCRIPTION_FILE_EXTENSIONS = TranscriptionModelFormat.entries
     .map { format -> format.fileExtension }
     .toSet()
-
-private fun defaultWhisperFileName(config: ProcessingConfig): String =
-    when (config.whisperModelSize) {
-        WhisperModelSize.Base -> "ggml-base-q5_1.bin"
-        WhisperModelSize.Small -> "ggml-small-q5_1.bin"
-    }
 
 @Preview(name = "Summarize Screen", showBackground = true, backgroundColor = 0xFFFAFAFA)
 @Composable
@@ -1138,10 +1074,8 @@ private fun SummarizeScreenPreview() {
             onCopySummary = {},
             onShareSummary = {},
             onImportTranscriptionRequested = {},
-            onImportWhisperRequested = {},
             onImportLlmRequested = {},
             onOpenTranscriptionDownloadPicker = {},
-            onOpenWhisperDownloadPicker = {},
             onOpenLlmDownloadPicker = {},
             onCancelDownloadRequested = {},
             onConfigChanged = {},
@@ -1221,10 +1155,8 @@ private fun previewUiState(): SummarizeUiState {
         activeSession = activeSession,
         recentSessions = recentSessions,
         transcriptionAvailability = ModelAvailability.Ready,
-        whisperAvailability = ModelAvailability.Ready,
         llmAvailability = ModelAvailability.Ready,
         transcriptionSuggestedModels = emptyList(),
-        whisperSuggestedModels = emptyList(),
         llmSuggestedModels = suggestedModels,
         processingConfig = ProcessingConfig(),
         transientMessage = null,

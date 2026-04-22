@@ -11,9 +11,8 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.morgan.idonthaveyourtime.core.data.datasource.settings.ProcessingConfigLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.di.IoDispatcher
 import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
-import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import io.morgan.idonthaveyourtime.core.model.SummarizerRuntime
-import io.morgan.idonthaveyourtime.core.model.WhisperModelSize
+import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
@@ -43,7 +42,6 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
         context.processingConfigDataStore.edit { preferences ->
                 preferences[KEY_TRANSCRIPTION_RUNTIME] = config.transcriptionRuntime.name
                 preferences[KEY_TRANSCRIPTION_MODEL_FILE_NAME] = config.transcriptionModelFileName
-                preferences[KEY_WHISPER_MODEL_SIZE] = config.whisperModelSize.name
                 preferences[KEY_LLM_MODEL_FILE_NAME] = config.llmModelFileName
                 preferences[KEY_SUMMARIZER_RUNTIME] = config.summarizerRuntime.name
                 preferences[KEY_SEGMENT_TARGET_MS] = config.segmentationTargetSpeechMs
@@ -64,10 +62,6 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
             ?.takeIf { it.isNotEmpty() }
             ?: ProcessingConfig().transcriptionModelFileName
 
-        val whisperModelSize = get(KEY_WHISPER_MODEL_SIZE)
-            ?.let { raw -> runCatching { WhisperModelSize.valueOf(raw) }.getOrNull() }
-            ?: ProcessingConfig().whisperModelSize
-
         val llmModelFileName = get(KEY_LLM_MODEL_FILE_NAME)
             ?.trim()
             ?.takeIf { it.isNotEmpty() }
@@ -84,7 +78,6 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
         return ProcessingConfig(
             transcriptionRuntime = transcriptionRuntime,
             transcriptionModelFileName = transcriptionModelFileName,
-            whisperModelSize = whisperModelSize,
             llmModelFileName = llmModelFileName,
             summarizerRuntime = summarizerRuntime,
             segmentationTargetSpeechMs = targetMs,
@@ -96,7 +89,6 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
     private companion object {
         val KEY_TRANSCRIPTION_RUNTIME = stringPreferencesKey("transcription_runtime")
         val KEY_TRANSCRIPTION_MODEL_FILE_NAME = stringPreferencesKey("transcription_model_file_name")
-        val KEY_WHISPER_MODEL_SIZE = stringPreferencesKey("whisper_model_size")
         val KEY_LLM_MODEL_FILE_NAME = stringPreferencesKey("llm_model_file_name")
         val KEY_SUMMARIZER_RUNTIME = stringPreferencesKey("summarizer_runtime")
         val KEY_SEGMENT_TARGET_MS = longPreferencesKey("segment_target_ms")

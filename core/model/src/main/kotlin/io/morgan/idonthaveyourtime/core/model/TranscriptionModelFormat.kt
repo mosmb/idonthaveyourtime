@@ -5,7 +5,6 @@ enum class TranscriptionModelFormat(
     val fileExtension: String,
 ) {
     LiteRtLm("LiteRT-LM (.litertlm)", "litertlm"),
-    WhisperBin("Whisper (.bin)", "bin"),
     ;
 
     companion object {
