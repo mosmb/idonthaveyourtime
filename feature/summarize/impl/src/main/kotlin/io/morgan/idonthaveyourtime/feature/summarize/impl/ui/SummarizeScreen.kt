@@ -1262,7 +1262,6 @@ private fun configuredSummarizerLabel(config: ProcessingConfig): String {
     val autoRuntime = when (format) {
         SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm
         SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference
-        SummarizerModelFormat.Gguf -> SummarizerRuntime.LlamaCpp
         null -> null
     }
 

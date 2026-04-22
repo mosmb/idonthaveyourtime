@@ -30,7 +30,6 @@ class RoutingSummarizerEngineLocalDataSourceTest {
             engines = setOf(
                 FakeSummarizerEngine(configDataSource, SummarizerRuntime.LiteRtLm, setOf(SummarizerModelFormat.LiteRtLm)),
                 FakeSummarizerEngine(configDataSource, SummarizerRuntime.MediaPipeLlmInference, setOf(SummarizerModelFormat.Task)),
-                FakeSummarizerEngine(configDataSource, SummarizerRuntime.LlamaCpp, setOf(SummarizerModelFormat.Gguf)),
             ),
         )
 
@@ -43,7 +42,7 @@ class RoutingSummarizerEngineLocalDataSourceTest {
     }
 
     @Test
-    fun `probe explicit MediaPipe falls back to llama for gguf models`() = runTest {
+    fun `probe explicit MediaPipe rejects gguf models`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
                 llmModelFileName = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
@@ -56,15 +55,15 @@ class RoutingSummarizerEngineLocalDataSourceTest {
             engines = setOf(
                 FakeSummarizerEngine(configDataSource, SummarizerRuntime.LiteRtLm, setOf(SummarizerModelFormat.LiteRtLm)),
                 FakeSummarizerEngine(configDataSource, SummarizerRuntime.MediaPipeLlmInference, setOf(SummarizerModelFormat.Task)),
-                FakeSummarizerEngine(configDataSource, SummarizerRuntime.LlamaCpp, setOf(SummarizerModelFormat.Gguf)),
             ),
         )
 
         val probe = selector.probe().getOrThrow()
 
-        assertThat(probe.supported).isTrue()
-        assertThat(probe.selectedRuntime).isEqualTo(SummarizerRuntime.LlamaCpp)
-        assertThat(probe.fallbackReason).contains("Requested MediaPipe LLM Inference")
+        assertThat(probe.supported).isFalse()
+        assertThat(probe.selectedRuntime).isNull()
+        assertThat(probe.modelFormat).isNull()
+        assertThat(probe.failureReason).contains("Unsupported summarizer model format")
     }
 
     @Test
@@ -85,15 +84,10 @@ class RoutingSummarizerEngineLocalDataSourceTest {
             runtime = SummarizerRuntime.MediaPipeLlmInference,
             supportedFormats = setOf(SummarizerModelFormat.Task),
         )
-        val llama = FakeSummarizerEngine(
-            processingConfigDataSource = configDataSource,
-            runtime = SummarizerRuntime.LlamaCpp,
-            supportedFormats = setOf(SummarizerModelFormat.Gguf),
-        )
 
         val selector = RoutingSummarizerEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(liteRt, mediaPipe, llama),
+            engines = setOf(liteRt, mediaPipe),
         )
 
         val result = selector.mapChunk(
@@ -104,7 +98,6 @@ class RoutingSummarizerEngineLocalDataSourceTest {
         assertThat(result).isEqualTo("MediaPipe LLM Inference-map")
         assertThat(mediaPipe.mapCalls).isEqualTo(1)
         assertThat(liteRt.mapCalls).isEqualTo(0)
-        assertThat(llama.mapCalls).isEqualTo(0)
     }
 
     private class FakeProcessingConfigLocalDataSource(
@@ -133,9 +126,9 @@ class RoutingSummarizerEngineLocalDataSourceTest {
             SummarizerEngineCapability(
                 runtime = runtime,
                 supportedFormats = supportedFormats,
-                supportsStreaming = runtime != SummarizerRuntime.LlamaCpp,
-                supportsAsyncGeneration = runtime != SummarizerRuntime.LlamaCpp,
-                supportsHardwareAcceleration = runtime != SummarizerRuntime.LlamaCpp,
+                supportsStreaming = true,
+                supportsAsyncGeneration = true,
+                supportsHardwareAcceleration = true,
             )
 
         override suspend fun probe(): Result<SummarizerEngineProbeResult> = runCatching {

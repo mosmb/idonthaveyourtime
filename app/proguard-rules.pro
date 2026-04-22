@@ -20,9 +20,5 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# ---- JNI / native interop ----
-# JNI method names are derived from the class + method names, so these entrypoints must not be renamed/removed.
--keep class io.morgan.idonthaveyourtime.core.llm.LlamaJni { *; }
-
 # Keep reflection-relevant metadata used by libraries like Retrofit.
 -keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod

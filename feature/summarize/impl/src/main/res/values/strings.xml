@@ -12,7 +12,7 @@
     <string name="model_ready">Ready</string>
     <string name="import_model">Import model</string>
     <string name="import_transcription_model">Import transcription model (.litertlm)</string>
-    <string name="import_llm_model">Import LLM model (.litertlm, .task, .gguf)</string>
+    <string name="import_llm_model">Import LLM model (.litertlm, .task)</string>
     <string name="download_from_huggingface">Download from HuggingFace</string>
     <string name="cancel_download">Cancel download</string>
     <string name="download_warning_any_network">Downloads can be large and may use cellular data.</string>

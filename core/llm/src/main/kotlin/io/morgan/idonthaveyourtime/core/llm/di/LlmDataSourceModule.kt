@@ -11,7 +11,6 @@ import dagger.multibindings.IntoSet
 import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerBackend
 import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.llm.LiteRtLmSummarizerEngineLocalDataSource
-import io.morgan.idonthaveyourtime.core.llm.LlamaCppSummarizerEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.llm.MediaPipeLlmInferenceSummarizerEngineLocalDataSource
 
 @Module
@@ -37,12 +36,5 @@ internal abstract class LlmDataSourceModule {
     @SummarizerBackend
     abstract fun bindMediaPipeSummarizer(
         impl: MediaPipeLlmInferenceSummarizerEngineLocalDataSource,
-    ): SummarizerEngineLocalDataSource
-
-    @Binds
-    @IntoSet
-    @SummarizerBackend
-    abstract fun bindLlamaSummarizer(
-        impl: LlamaCppSummarizerEngineLocalDataSource,
     ): SummarizerEngineLocalDataSource
 }

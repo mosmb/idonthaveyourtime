@@ -163,7 +163,6 @@ internal class RoutingSummarizerEngineLocalDataSource @Inject constructor(
         val preferred = when (modelFormat) {
             SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm
             SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference
-            SummarizerModelFormat.Gguf -> SummarizerRuntime.LlamaCpp
         }
 
         return buildList {
@@ -171,7 +170,6 @@ internal class RoutingSummarizerEngineLocalDataSource @Inject constructor(
                 add(requestedRuntime)
             }
             add(preferred)
-            add(SummarizerRuntime.LlamaCpp)
             add(SummarizerRuntime.LiteRtLm)
             add(SummarizerRuntime.MediaPipeLlmInference)
         }.distinct()
@@ -185,7 +183,6 @@ internal class RoutingSummarizerEngineLocalDataSource @Inject constructor(
         val preferredRuntime = when (modelFormat) {
             SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm
             SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference
-            SummarizerModelFormat.Gguf -> SummarizerRuntime.LlamaCpp
         }
 
         return when {

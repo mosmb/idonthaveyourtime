@@ -86,33 +86,6 @@ class GetSuggestedModelsUseCase @Inject constructor() {
                 summarizerRuntime = SummarizerRuntime.MediaPipeLlmInference,
                 summarizerModelFormat = SummarizerModelFormat.Task,
             ),
-            SuggestedModel(
-                modelId = ModelId.Llm,
-                displayName = "Qwen2.5 0.5B Instruct (Q4_K_M)",
-                description = "llama.cpp fallback. Small GGUF model for broad compatibility.",
-                huggingFaceRepoId = "bartowski/Qwen2.5-0.5B-Instruct-GGUF",
-                fileName = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
-                summarizerRuntime = SummarizerRuntime.LlamaCpp,
-                summarizerModelFormat = SummarizerModelFormat.Gguf,
-            ),
-            SuggestedModel(
-                modelId = ModelId.Llm,
-                displayName = "Qwen2.5 1.5B Instruct (Q4_K_M)",
-                description = "llama.cpp fallback with better quality than 0.5B, but heavier.",
-                huggingFaceRepoId = "bartowski/Qwen2.5-1.5B-Instruct-GGUF",
-                fileName = "Qwen2.5-1.5B-Instruct-Q4_K_M.gguf",
-                summarizerRuntime = SummarizerRuntime.LlamaCpp,
-                summarizerModelFormat = SummarizerModelFormat.Gguf,
-            ),
-            SuggestedModel(
-                modelId = ModelId.Llm,
-                displayName = "Gemma 2 2B IT (Q4_K_M)",
-                description = "Higher-quality llama.cpp fallback. Large GGUF download.",
-                huggingFaceRepoId = "bartowski/gemma-2-2b-it-GGUF",
-                fileName = "gemma-2-2b-it-Q4_K_M.gguf",
-                summarizerRuntime = SummarizerRuntime.LlamaCpp,
-                summarizerModelFormat = SummarizerModelFormat.Gguf,
-            ),
         )
     }
 }

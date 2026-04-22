@@ -6,5 +6,4 @@ enum class SummarizerRuntime(
     Auto(displayName = "Auto"),
     LiteRtLm(displayName = "LiteRT-LM"),
     MediaPipeLlmInference(displayName = "MediaPipe LLM Inference"),
-    LlamaCpp(displayName = "llama.cpp"),
 }

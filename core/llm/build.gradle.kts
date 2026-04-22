@@ -12,12 +12,6 @@ android {
     defaultConfig {
         minSdk = 30
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        externalNativeBuild {
-            cmake {
-                cppFlags += listOf("-std=c++17")
-            }
-        }
     }
 
     compileOptions {
@@ -28,13 +22,6 @@ android {
     kotlinOptions {
         jvmTarget = "11"
         freeCompilerArgs += listOf("-Xskip-metadata-version-check")
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
     }
 }
 
