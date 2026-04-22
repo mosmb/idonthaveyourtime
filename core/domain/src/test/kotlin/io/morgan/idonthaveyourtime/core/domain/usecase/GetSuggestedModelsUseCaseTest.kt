@@ -2,6 +2,7 @@ package io.morgan.idonthaveyourtime.core.domain.usecase
 
 import com.google.common.truth.Truth.assertThat
 import io.morgan.idonthaveyourtime.core.model.ModelId
+import io.morgan.idonthaveyourtime.core.model.SuggestedModel
 import io.morgan.idonthaveyourtime.core.model.SummarizerModelFormat
 import io.morgan.idonthaveyourtime.core.model.SummarizerRuntime
 import org.junit.Test
@@ -24,6 +25,14 @@ class GetSuggestedModelsUseCaseTest {
     }
 
     @Test
+    fun `suggested model contract does not expose runtime metadata`() {
+        val fieldNames = SuggestedModel::class.java.declaredFields.map { it.name }.toSet()
+
+        assertThat(fieldNames).doesNotContain("transcriptionRuntime")
+        assertThat(fieldNames).doesNotContain("summarizerRuntime")
+    }
+
+    @Test
     fun `summarizer contracts do not expose llama or gguf`() {
         assertThat(SummarizerRuntime.entries.map { it.name }).doesNotContain("LlamaCpp")
         assertThat(SummarizerModelFormat.entries.map { it.name }).doesNotContain("Gguf")
@@ -34,7 +43,6 @@ class GetSuggestedModelsUseCaseTest {
         val suggestions = useCase(ModelId.Llm)
 
         assertThat(suggestions.any { it.fileName.trim().lowercase().endsWith(".gguf") }).isFalse()
-        assertThat(suggestions.any { it.summarizerRuntime?.name == "LlamaCpp" }).isFalse()
         assertThat(suggestions.any { it.summarizerModelFormat?.fileExtension == "gguf" }).isFalse()
     }
 }

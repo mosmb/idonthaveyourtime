@@ -22,8 +22,6 @@
     <string name="close">Close</string>
 
     <string name="quality_title">Quality vs speed</string>
-    <string name="transcription_runtime_title">Transcription runtime</string>
-    <string name="runtime_title">Summarizer runtime</string>
     <string name="model_format_title">Selected model format</string>
     <string name="preset_fast">Fast</string>
     <string name="preset_balanced">Balanced</string>

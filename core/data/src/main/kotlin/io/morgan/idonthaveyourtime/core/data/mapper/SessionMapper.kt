@@ -56,7 +56,8 @@ private fun String.toProcessingStage(): ProcessingStage =
 
 private fun SessionEntity.asTranscriptionDiagnostics(): SessionTranscriptionDiagnostics? {
     val runtime = transcriptionRuntime
-        ?.let { rawRuntime -> runCatching { TranscriptionRuntime.valueOf(rawRuntime) }.getOrNull() }
+        ?.takeIf { rawRuntime -> rawRuntime == TranscriptionRuntime.GoogleAiEdgeLiteRtLm.name }
+        ?.let { TranscriptionRuntime.GoogleAiEdgeLiteRtLm }
         ?: return null
     val warmStart = transcriptionWarmStart ?: return null
     val totalMs = transcriptionTotalMs ?: return null

@@ -20,14 +20,12 @@ import io.morgan.idonthaveyourtime.core.data.datasource.model.impl.ModelManagerM
 import io.morgan.idonthaveyourtime.core.data.datasource.model.impl.WorkManagerModelDownloaderRemoteDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.processing.ProcessingQueueLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.processing.TempFileCleanerLocalDataSource
-import io.morgan.idonthaveyourtime.core.data.datasource.transcription.TranscriptionEngineLocalDataSource
-import io.morgan.idonthaveyourtime.core.data.datasource.transcription.impl.RoutingTranscriptionEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerEngineLocalDataSource
-import io.morgan.idonthaveyourtime.core.data.datasource.summarization.impl.RoutingSummarizerEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.processing.impl.CacheTempFileCleanerLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.processing.impl.WorkManagerProcessingQueueLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.settings.ProcessingConfigLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.settings.impl.DataStoreProcessingConfigLocalDataSource
+import io.morgan.idonthaveyourtime.core.data.datasource.summarization.impl.RoutingSummarizerEngineLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.repository.DefaultAudioImportRepository
 import io.morgan.idonthaveyourtime.core.data.repository.DefaultAudioProcessingRepository
 import io.morgan.idonthaveyourtime.core.data.repository.DefaultModelRepository
@@ -81,10 +79,6 @@ internal abstract class DataSourceBindingsModule {
     @Binds
     @Singleton
     abstract fun bindProcessingConfigStore(impl: DataStoreProcessingConfigLocalDataSource): ProcessingConfigLocalDataSource
-
-    @Binds
-    @Singleton
-    abstract fun bindTranscriptionEngine(impl: RoutingTranscriptionEngineLocalDataSource): TranscriptionEngineLocalDataSource
 
     @Binds
     @Singleton

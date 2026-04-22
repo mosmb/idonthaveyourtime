@@ -107,6 +107,86 @@ class RoomSessionRepositoryTest {
         assertThat(saved?.transcriptionDiagnostics).isEqualTo(baseDiagnostics())
     }
 
+    @Test
+    fun `legacy whisper transcription diagnostics rows stay null`() = runTest {
+        val sessionDao = FakeSessionDao()
+        sessionDao.upsert(
+            SessionEntity(
+                id = "legacy-whisper",
+                createdAtEpochMs = 1L,
+                sourceName = "voice.ogg",
+                mimeType = "audio/ogg",
+                durationMs = null,
+                stage = ProcessingStage.Success.name,
+                progress = 1f,
+                transcript = "legacy transcript",
+                summary = "legacy summary",
+                languageCode = "en",
+                errorCode = null,
+                errorMessage = null,
+                transcriptionRuntime = "WhisperCpp",
+                transcriptionBackendName = null,
+                transcriptionModelFileName = "ggml-base-q5_1.bin",
+                transcriptionWarmStart = true,
+                transcriptionModelLoadMs = 42L,
+                transcriptionFirstTextMs = 21L,
+                transcriptionTotalMs = 500L,
+                transcriptionAudioDurationMs = 4_000L,
+                transcriptionAudioSecondsPerWallSecond = 8.0,
+                transcriptionFallbackReason = null,
+                transcriptionFailureReason = null,
+                transcriptionDeviceLabel = "Legacy Device",
+                inputFilePath = "/tmp/import.ogg",
+                wavFilePath = "/tmp/converted.wav",
+            ),
+        )
+        val repository = RoomSessionRepository(sessionDao, FakeTranscriptSegmentDao(), FakeChunkSummaryDao())
+
+        val saved = repository.getSession("legacy-whisper")
+
+        assertThat(saved?.transcriptionDiagnostics).isNull()
+    }
+
+    @Test
+    fun `transcription diagnostics rows missing required timing fields stay null`() = runTest {
+        val sessionDao = FakeSessionDao()
+        sessionDao.upsert(
+            SessionEntity(
+                id = "missing-fields",
+                createdAtEpochMs = 1L,
+                sourceName = "voice.ogg",
+                mimeType = "audio/ogg",
+                durationMs = null,
+                stage = ProcessingStage.Success.name,
+                progress = 1f,
+                transcript = "legacy transcript",
+                summary = "legacy summary",
+                languageCode = "en",
+                errorCode = null,
+                errorMessage = null,
+                transcriptionRuntime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm.name,
+                transcriptionBackendName = "GPU",
+                transcriptionModelFileName = "gemma-4-E2B-it.litertlm",
+                transcriptionWarmStart = null,
+                transcriptionModelLoadMs = 42L,
+                transcriptionFirstTextMs = 21L,
+                transcriptionTotalMs = 500L,
+                transcriptionAudioDurationMs = 4_000L,
+                transcriptionAudioSecondsPerWallSecond = 8.0,
+                transcriptionFallbackReason = null,
+                transcriptionFailureReason = null,
+                transcriptionDeviceLabel = "Pixel",
+                inputFilePath = "/tmp/import.ogg",
+                wavFilePath = "/tmp/converted.wav",
+            ),
+        )
+        val repository = RoomSessionRepository(sessionDao, FakeTranscriptSegmentDao(), FakeChunkSummaryDao())
+
+        val saved = repository.getSession("missing-fields")
+
+        assertThat(saved?.transcriptionDiagnostics).isNull()
+    }
+
     private fun baseSession(id: String) = ProcessingSession(
         id = id,
         createdAtEpochMs = 1L,

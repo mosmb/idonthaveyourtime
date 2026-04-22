@@ -1,8 +1,9 @@
 package io.morgan.idonthaveyourtime.core.data.datasource.summarization.impl
 
 import io.morgan.idonthaveyourtime.core.data.datasource.settings.ProcessingConfigLocalDataSource
-import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerBackend
 import io.morgan.idonthaveyourtime.core.data.datasource.summarization.SummarizerEngineLocalDataSource
+import io.morgan.idonthaveyourtime.core.data.di.LiteRtLmSummarizerEngine
+import io.morgan.idonthaveyourtime.core.data.di.MediaPipeSummarizerEngine
 import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
 import io.morgan.idonthaveyourtime.core.model.SummarizerEngineCapability
 import io.morgan.idonthaveyourtime.core.model.SummarizerEngineProbeResult
@@ -14,22 +15,22 @@ import timber.log.Timber
 
 internal class RoutingSummarizerEngineLocalDataSource @Inject constructor(
     private val processingConfigDataSource: ProcessingConfigLocalDataSource,
-    @SummarizerBackend private val engines: Set<@JvmSuppressWildcards SummarizerEngineLocalDataSource>,
+    @LiteRtLmSummarizerEngine private val liteRtLmEngine: SummarizerEngineLocalDataSource,
+    @MediaPipeSummarizerEngine private val mediaPipeEngine: SummarizerEngineLocalDataSource,
 ) : SummarizerEngineLocalDataSource {
 
-    private val enginesByRuntime: Map<SummarizerRuntime, SummarizerEngineLocalDataSource> by lazy {
-        engines.associateBy { engine -> engine.capability().runtime }
-    }
+    private val liteRtLmCapability by lazy { liteRtLmEngine.capability() }
+    private val mediaPipeCapability by lazy { mediaPipeEngine.capability() }
 
     override fun capability(): SummarizerEngineCapability =
         SummarizerEngineCapability(
-            runtime = SummarizerRuntime.Auto,
-            supportedFormats = engines
-                .flatMap { engine -> engine.capability().supportedFormats }
-                .toSet(),
-            supportsStreaming = engines.any { engine -> engine.capability().supportsStreaming },
-            supportsAsyncGeneration = engines.any { engine -> engine.capability().supportsAsyncGeneration },
-            supportsHardwareAcceleration = engines.any { engine -> engine.capability().supportsHardwareAcceleration },
+            runtime = null,
+            supportedFormats = liteRtLmCapability.supportedFormats + mediaPipeCapability.supportedFormats,
+            supportsStreaming = liteRtLmCapability.supportsStreaming || mediaPipeCapability.supportsStreaming,
+            supportsAsyncGeneration = liteRtLmCapability.supportsAsyncGeneration ||
+                mediaPipeCapability.supportsAsyncGeneration,
+            supportsHardwareAcceleration = liteRtLmCapability.supportsHardwareAcceleration ||
+                mediaPipeCapability.supportsHardwareAcceleration,
         )
 
     override suspend fun probe(): Result<SummarizerEngineProbeResult> =
@@ -83,7 +84,7 @@ internal class RoutingSummarizerEngineLocalDataSource @Inject constructor(
             return ResolvedSummarizerEngine(
                 engine = null,
                 probe = SummarizerEngineProbeResult(
-                    requestedRuntime = config.summarizerRuntime,
+                    requestedRuntime = defaultRuntime(),
                     selectedRuntime = null,
                     modelFormat = null,
                     modelFileName = fileName,
@@ -94,107 +95,60 @@ internal class RoutingSummarizerEngineLocalDataSource @Inject constructor(
             )
         }
 
-        val candidates = candidateRuntimes(
-            requestedRuntime = config.summarizerRuntime,
-            modelFormat = modelFormat,
-        )
+        val selectedRuntime = runtimeFor(modelFormat)
+        val engine = engineFor(selectedRuntime)
+        val engineProbe = engine.probe().getOrElse { throwable ->
+            SummarizerEngineProbeResult(
+                requestedRuntime = selectedRuntime,
+                selectedRuntime = selectedRuntime,
+                modelFormat = modelFormat,
+                modelFileName = fileName,
+                supported = false,
+                supportsStreaming = engine.capability().supportsStreaming,
+                failureReason = throwable.message ?: "Probe failed for ${selectedRuntime.displayName}.",
+            )
+        }
 
-        var firstFailureReason: String? = null
-        for (runtime in candidates) {
-            val engine = enginesByRuntime[runtime] ?: continue
-            val engineProbe = engine.probe().getOrElse { throwable ->
-                SummarizerEngineProbeResult(
-                    requestedRuntime = runtime,
-                    selectedRuntime = runtime,
+        if (!engineProbe.supported) {
+            return ResolvedSummarizerEngine(
+                engine = null,
+                probe = SummarizerEngineProbeResult(
+                    requestedRuntime = selectedRuntime,
+                    selectedRuntime = null,
                     modelFormat = modelFormat,
                     modelFileName = fileName,
                     supported = false,
-                    supportsStreaming = engine.capability().supportsStreaming,
-                    failureReason = throwable.message ?: "Probe failed for ${runtime.displayName}.",
-                )
-            }
-
-            if (!engineProbe.supported) {
-                if (firstFailureReason == null) {
-                    firstFailureReason = engineProbe.failureReason
-                }
-                continue
-            }
-
-            val fallbackReason = buildFallbackReason(
-                requestedRuntime = config.summarizerRuntime,
-                selectedRuntime = runtime,
-                modelFormat = modelFormat,
-            )
-
-            return ResolvedSummarizerEngine(
-                engine = engine,
-                probe = SummarizerEngineProbeResult(
-                    requestedRuntime = config.summarizerRuntime,
-                    selectedRuntime = runtime,
-                    modelFormat = modelFormat,
-                    modelFileName = fileName,
-                    supported = true,
-                    supportsStreaming = engine.capability().supportsStreaming,
-                    fallbackReason = fallbackReason,
+                    supportsStreaming = false,
+                    failureReason = engineProbe.failureReason ?: "No summarizer runtime could handle ${modelFormat.displayName}.",
                 ),
             )
         }
 
         return ResolvedSummarizerEngine(
-            engine = null,
+            engine = engine,
             probe = SummarizerEngineProbeResult(
-                requestedRuntime = config.summarizerRuntime,
-                selectedRuntime = null,
+                requestedRuntime = selectedRuntime,
+                selectedRuntime = selectedRuntime,
                 modelFormat = modelFormat,
                 modelFileName = fileName,
-                supported = false,
-                supportsStreaming = false,
-                failureReason = firstFailureReason
-                    ?: "No summarizer runtime could handle ${modelFormat.displayName}.",
+                supported = true,
+                supportsStreaming = engine.capability().supportsStreaming,
+                fallbackReason = null,
             ),
         )
     }
 
-    private fun candidateRuntimes(
-        requestedRuntime: SummarizerRuntime,
-        modelFormat: SummarizerModelFormat,
-    ): List<SummarizerRuntime> {
-        val preferred = when (modelFormat) {
-            SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm
-            SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference
-        }
-
-        return buildList {
-            if (requestedRuntime != SummarizerRuntime.Auto) {
-                add(requestedRuntime)
-            }
-            add(preferred)
-            add(SummarizerRuntime.LiteRtLm)
-            add(SummarizerRuntime.MediaPipeLlmInference)
-        }.distinct()
+    private fun runtimeFor(modelFormat: SummarizerModelFormat): SummarizerRuntime = when (modelFormat) {
+        SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm
+        SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference
     }
 
-    private fun buildFallbackReason(
-        requestedRuntime: SummarizerRuntime,
-        selectedRuntime: SummarizerRuntime,
-        modelFormat: SummarizerModelFormat,
-    ): String? {
-        val preferredRuntime = when (modelFormat) {
-            SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm
-            SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference
-        }
-
-        return when {
-            requestedRuntime == SummarizerRuntime.Auto && selectedRuntime != preferredRuntime ->
-                "Auto preferred ${preferredRuntime.displayName} for ${modelFormat.displayName}, but used ${selectedRuntime.displayName}."
-
-            requestedRuntime != SummarizerRuntime.Auto && selectedRuntime != requestedRuntime ->
-                "Requested ${requestedRuntime.displayName}, but `${modelFormat.displayName}` selected ${selectedRuntime.displayName}."
-
-            else -> null
-        }
+    private fun engineFor(runtime: SummarizerRuntime): SummarizerEngineLocalDataSource = when (runtime) {
+        SummarizerRuntime.LiteRtLm -> liteRtLmEngine
+        SummarizerRuntime.MediaPipeLlmInference -> mediaPipeEngine
     }
+
+    private fun defaultRuntime(): SummarizerRuntime = SummarizerRuntime.LiteRtLm
 
     private fun logSelection(probe: SummarizerEngineProbeResult, operation: String) {
         if (probe.supported) {

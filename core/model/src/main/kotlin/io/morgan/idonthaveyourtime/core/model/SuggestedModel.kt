@@ -7,9 +7,7 @@ data class SuggestedModel(
     val huggingFaceRepoId: String,
     val revision: String = "main",
     val fileName: String,
-    val transcriptionRuntime: TranscriptionRuntime? = null,
     val transcriptionModelFormat: TranscriptionModelFormat? = null,
-    val summarizerRuntime: SummarizerRuntime? = null,
     val summarizerModelFormat: SummarizerModelFormat? = null,
 ) {
     val downloadUrl: String
