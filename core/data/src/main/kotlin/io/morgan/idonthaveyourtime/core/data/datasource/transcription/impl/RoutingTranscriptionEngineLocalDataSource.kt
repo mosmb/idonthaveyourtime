@@ -144,20 +144,8 @@ internal class RoutingTranscriptionEngineLocalDataSource @Inject constructor(
         }
 
         when (modelFormat) {
-            TranscriptionModelFormat.LiteRtLm -> {
-                add(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
-                add(TranscriptionRuntime.WhisperCpp)
-            }
-
-            TranscriptionModelFormat.WhisperBin -> {
-                add(TranscriptionRuntime.WhisperCpp)
-                add(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
-            }
-
-            null -> {
-                add(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
-                add(TranscriptionRuntime.WhisperCpp)
-            }
+            TranscriptionModelFormat.LiteRtLm -> add(TranscriptionRuntime.GoogleAiEdgeLiteRtLm)
+            null -> Unit
         }
     }.distinct()
 
@@ -165,26 +153,7 @@ internal class RoutingTranscriptionEngineLocalDataSource @Inject constructor(
         requestedRuntime: TranscriptionRuntime,
         selectedRuntime: TranscriptionRuntime,
         modelFormat: TranscriptionModelFormat?,
-    ): String? {
-        val preferredRuntime = when (modelFormat) {
-            TranscriptionModelFormat.LiteRtLm -> TranscriptionRuntime.GoogleAiEdgeLiteRtLm
-            TranscriptionModelFormat.WhisperBin -> TranscriptionRuntime.WhisperCpp
-            null -> TranscriptionRuntime.GoogleAiEdgeLiteRtLm
-        }
-
-        return when {
-            requestedRuntime == TranscriptionRuntime.Auto && selectedRuntime != preferredRuntime ->
-                "Auto preferred ${preferredRuntime.displayName} for ${modelFormat?.displayName ?: "unknown format"}, but used ${selectedRuntime.displayName}."
-
-            requestedRuntime != TranscriptionRuntime.Auto && selectedRuntime != requestedRuntime ->
-                "Requested ${requestedRuntime.displayName}, but routed to ${selectedRuntime.displayName}."
-
-            requestedRuntime == TranscriptionRuntime.Auto && selectedRuntime == TranscriptionRuntime.WhisperCpp && modelFormat == TranscriptionModelFormat.LiteRtLm ->
-                "Google AI Edge LiteRT-LM was unavailable; using whisper.cpp fallback."
-
-            else -> null
-        }
-    }
+    ): String? = null
 
     private fun logSelection(probe: TranscriptionEngineProbeResult, operation: String) {
         if (probe.supported) {

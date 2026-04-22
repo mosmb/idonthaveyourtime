@@ -36,10 +36,6 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
                     runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                     supportedFormats = setOf(TranscriptionModelFormat.LiteRtLm),
                 ),
-                FakeTranscriptionEngine(
-                    runtime = TranscriptionRuntime.WhisperCpp,
-                    supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
-                ),
             ),
         )
 
@@ -52,7 +48,7 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
     }
 
     @Test
-    fun `probe falls back to whisper when Google transcription cannot open configured model`() = runTest {
+    fun `probe fails when Google transcription cannot open configured litertlm model`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
                 transcriptionRuntime = TranscriptionRuntime.Auto,
@@ -67,26 +63,22 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
                     runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                     supportedFormats = emptySet(),
                 ),
-                FakeTranscriptionEngine(
-                    runtime = TranscriptionRuntime.WhisperCpp,
-                    supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
-                ),
             ),
         )
 
         val probe = selector.probe().getOrThrow()
 
-        assertThat(probe.supported).isTrue()
-        assertThat(probe.selectedRuntime).isEqualTo(TranscriptionRuntime.WhisperCpp)
-        assertThat(probe.fallbackReason).contains("Google AI Edge")
+        assertThat(probe.supported).isFalse()
+        assertThat(probe.selectedRuntime).isNull()
+        assertThat(probe.failureReason).contains("No transcription runtime could handle")
     }
 
     @Test
-    fun `probe fails fast for unsupported transcription model extensions`() = runTest {
+    fun `probe rejects whisper bin transcription models`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
                 transcriptionRuntime = TranscriptionRuntime.Auto,
-                transcriptionModelFileName = "model.unsupported",
+                transcriptionModelFileName = "ggml-base-q5_1.bin",
             ),
         )
 
@@ -96,10 +88,6 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
                 FakeTranscriptionEngine(
                     runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                     supportedFormats = setOf(TranscriptionModelFormat.LiteRtLm),
-                ),
-                FakeTranscriptionEngine(
-                    runtime = TranscriptionRuntime.WhisperCpp,
-                    supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
                 ),
             ),
         )
@@ -125,15 +113,9 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
             supportedFormats = setOf(TranscriptionModelFormat.LiteRtLm),
             transcriptText = "google transcript",
         )
-        val whisper = FakeTranscriptionEngine(
-            runtime = TranscriptionRuntime.WhisperCpp,
-            supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
-            transcriptText = "whisper transcript",
-        )
-
         val selector = RoutingTranscriptionEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(google, whisper),
+            engines = setOf(google),
         )
 
         val request = TranscriptionRequest(
@@ -151,12 +133,11 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
 
         assertThat(result.transcript.text).isEqualTo("google transcript")
         assertThat(google.transcribeCalls).isEqualTo(1)
-        assertThat(whisper.transcribeCalls).isEqualTo(0)
         assertThat(google.recordedRequests.single()).isEqualTo(request)
     }
 
     @Test
-    fun `transcribe copies probe fallback reason into result metrics when Google cannot handle litertlm model`() = runTest {
+    fun `transcribe fails when no runtime can handle litertlm model`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
                 transcriptionRuntime = TranscriptionRuntime.Auto,
@@ -167,15 +148,10 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
             runtime = TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
             supportedFormats = emptySet(),
         )
-        val whisper = FakeTranscriptionEngine(
-            runtime = TranscriptionRuntime.WhisperCpp,
-            supportedFormats = setOf(TranscriptionModelFormat.WhisperBin),
-            transcriptText = "whisper transcript",
-        )
 
         val selector = RoutingTranscriptionEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(google, whisper),
+            engines = setOf(google),
         )
 
         val request = TranscriptionRequest(
@@ -189,12 +165,9 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
             languageHint = LanguageHint.Fixed("en"),
             onProgress = {},
             onPartialResult = {},
-        ).getOrThrow()
+        )
 
-        assertThat(result.transcript.text).isEqualTo("whisper transcript")
-        assertThat(result.metrics.runtime).isEqualTo(TranscriptionRuntime.WhisperCpp)
-        assertThat(result.metrics.fallbackReason).contains("Google AI Edge")
-        assertThat(whisper.transcribeCalls).isEqualTo(1)
+        assertThat(result.isFailure).isTrue()
         assertThat(google.transcribeCalls).isEqualTo(0)
     }
 
@@ -228,7 +201,7 @@ class RoutingTranscriptionEngineLocalDataSourceTest {
                 supportedFormats = supportedFormats,
                 supportsStreaming = runtime == TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
                 supportsAsyncGeneration = runtime == TranscriptionRuntime.GoogleAiEdgeLiteRtLm,
-                supportsHardwareAcceleration = runtime != TranscriptionRuntime.WhisperCpp,
+                supportsHardwareAcceleration = true,
             )
 
         override suspend fun probe(): Result<TranscriptionEngineProbeResult> = Result.success(

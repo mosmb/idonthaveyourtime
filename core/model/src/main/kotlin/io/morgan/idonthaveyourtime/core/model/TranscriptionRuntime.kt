@@ -5,5 +5,4 @@ enum class TranscriptionRuntime(
 ) {
     Auto("Auto"),
     GoogleAiEdgeLiteRtLm("Google AI Edge (LiteRT-LM)"),
-    WhisperCpp("whisper.cpp fallback"),
 }

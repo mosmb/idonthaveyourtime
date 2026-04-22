@@ -49,7 +49,6 @@ class SummarizeViewModel @Inject constructor(
     private val transientMessage = MutableStateFlow<String?>(null)
 
     private val transcriptionSuggestedModels: List<SuggestedModel> = getSuggestedModelsUseCase(ModelId.Transcription)
-    private val whisperSuggestedModels: List<SuggestedModel> = getSuggestedModelsUseCase(ModelId.Whisper)
     private val llmSuggestedModels: List<SuggestedModel> = getSuggestedModelsUseCase(ModelId.Llm)
 
     private val activeSessionFlow = activeSessionId.flatMapLatest { sessionId ->
@@ -62,18 +61,15 @@ class SummarizeViewModel @Inject constructor(
 
     private val recentSessionsFlow = observeRecentSessionsUseCase()
     private val transcriptionModelFlow = observeModelAvailabilityUseCase(ModelId.Transcription)
-    private val whisperModelFlow = observeModelAvailabilityUseCase(ModelId.Whisper)
     private val llmModelFlow = observeModelAvailabilityUseCase(ModelId.Llm)
     private val processingConfigFlow = observeProcessingConfigUseCase()
     private val modelStateFlow = combine(
         transcriptionModelFlow,
-        whisperModelFlow,
         llmModelFlow,
         processingConfigFlow,
-    ) { transcriptionAvailability, whisperAvailability, llmAvailability, processingConfig ->
+    ) { transcriptionAvailability, llmAvailability, processingConfig ->
         ModelState(
             transcriptionAvailability = transcriptionAvailability,
-            whisperAvailability = whisperAvailability,
             llmAvailability = llmAvailability,
             processingConfig = processingConfig,
         )
@@ -88,10 +84,8 @@ class SummarizeViewModel @Inject constructor(
             activeSession = activeSession,
             recentSessions = recentSessions,
             transcriptionAvailability = modelState.transcriptionAvailability,
-            whisperAvailability = modelState.whisperAvailability,
             llmAvailability = modelState.llmAvailability,
             transcriptionSuggestedModels = transcriptionSuggestedModels,
-            whisperSuggestedModels = whisperSuggestedModels,
             llmSuggestedModels = llmSuggestedModels,
             processingConfig = modelState.processingConfig,
         )
@@ -170,7 +164,6 @@ class SummarizeViewModel @Inject constructor(
             val currentConfig = uiState.value.processingConfig
             val nextConfig = when (model.modelId) {
                 ModelId.Transcription -> currentConfig.copy(transcriptionModelFileName = model.fileName)
-                ModelId.Whisper -> currentConfig
                 ModelId.Llm -> currentConfig.copy(llmModelFileName = model.fileName)
             }
             if (nextConfig != currentConfig) {
@@ -201,7 +194,6 @@ class SummarizeViewModel @Inject constructor(
 
     private data class ModelState(
         val transcriptionAvailability: io.morgan.idonthaveyourtime.core.model.ModelAvailability,
-        val whisperAvailability: io.morgan.idonthaveyourtime.core.model.ModelAvailability,
         val llmAvailability: io.morgan.idonthaveyourtime.core.model.ModelAvailability,
         val processingConfig: ProcessingConfig,
     )

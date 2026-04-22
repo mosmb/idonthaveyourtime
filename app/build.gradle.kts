@@ -67,7 +67,7 @@ android {
     }
 
     androidResources {
-        noCompress += setOf("bin", "gguf", "litertlm", "task")
+        noCompress += setOf("gguf", "litertlm", "task")
     }
 }
 
@@ -76,7 +76,6 @@ dependencies {
     implementation(project(":core:model"))
     implementation(project(":core:data"))
     implementation(project(":core:audio"))
-    implementation(project(":core:whisper"))
     implementation(project(":core:llm"))
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
@@ -113,7 +112,6 @@ dependencies {
     androidTestImplementation(project(":core:domain"))
     androidTestImplementation(project(":core:audio"))
     androidTestImplementation(project(":core:data"))
-    androidTestImplementation(project(":core:whisper"))
     androidTestImplementation(project(":core:llm"))
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.junit)

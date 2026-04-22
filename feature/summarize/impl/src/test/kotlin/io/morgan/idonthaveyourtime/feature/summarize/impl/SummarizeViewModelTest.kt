@@ -254,6 +254,48 @@ class SummarizeViewModelTest {
         collectionJob.cancel()
     }
 
+    @Test
+    fun `ui state only observes transcription and llm model availability`() = runTest {
+        val repository = InMemorySessionRepository()
+        val queue = FakeProcessingQueueRepository()
+        val processingConfigRepository = FakeProcessingConfigRepository()
+        val modelRepository = FakeModelRepository()
+
+        val viewModel = SummarizeViewModel(
+            enqueueSharedAudioUseCase = EnqueueSharedAudioUseCase(
+                sessionRepository = repository,
+                audioImportRepository = FakeAudioImportRepository(),
+                processingQueueRepository = queue,
+            ),
+            observeSessionUseCase = ObserveSessionUseCase(repository),
+            observeRecentSessionsUseCase = ObserveRecentSessionsUseCase(repository),
+            cancelSessionUseCase = CancelSessionUseCase(
+                processingQueueRepository = queue,
+                sessionRepository = repository,
+            ),
+            requeueSessionUseCase = RequeueSessionUseCase(repository, queue),
+            observeModelAvailabilityUseCase = ObserveModelAvailabilityUseCase(modelRepository),
+            getSuggestedModelsUseCase = GetSuggestedModelsUseCase(),
+            downloadSuggestedModelUseCase = DownloadSuggestedModelUseCase(modelRepository),
+            cancelModelDownloadUseCase = CancelModelDownloadUseCase(modelRepository),
+            observeProcessingConfigUseCase = ObserveProcessingConfigUseCase(processingConfigRepository),
+            setProcessingConfigUseCase = SetProcessingConfigUseCase(processingConfigRepository),
+        )
+
+        val collectionJob = launch(UnconfinedTestDispatcher(testScheduler)) {
+            viewModel.uiState.collect { }
+        }
+
+        advanceUntilIdle()
+
+        assertThat(modelRepository.observedModelIds).containsExactly(
+            ModelId.Transcription,
+            ModelId.Llm,
+        )
+
+        collectionJob.cancel()
+    }
+
     private fun createViewModel(
         repository: InMemorySessionRepository,
         queue: FakeProcessingQueueRepository,
@@ -320,10 +362,13 @@ class SummarizeViewModelTest {
     private class FakeModelRepository : ModelRepository {
         val enqueuedModels = mutableListOf<SuggestedModel>()
         val cancelledModelIds = mutableListOf<ModelId>()
+        val observedModelIds = mutableSetOf<ModelId>()
         private val availability = MutableStateFlow<ModelAvailability>(ModelAvailability.Ready)
 
-        override fun observeAvailability(modelId: ModelId): Flow<ModelAvailability> =
-            availability
+        override fun observeAvailability(modelId: ModelId): Flow<ModelAvailability> {
+            observedModelIds += modelId
+            return availability
+        }
 
         override suspend fun getModelPath(modelId: ModelId): Result<String> =
             Result.success("/tmp/model")

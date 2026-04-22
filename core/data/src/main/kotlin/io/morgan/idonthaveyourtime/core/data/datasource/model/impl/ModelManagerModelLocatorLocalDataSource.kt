@@ -6,7 +6,6 @@ import io.morgan.idonthaveyourtime.core.data.datasource.settings.ProcessingConfi
 import io.morgan.idonthaveyourtime.core.model.ModelAvailability
 import io.morgan.idonthaveyourtime.core.model.ModelId
 import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
-import io.morgan.idonthaveyourtime.core.model.WhisperModelSize
 import java.io.File
 import javax.inject.Inject
 import kotlin.system.measureTimeMillis
@@ -93,15 +92,6 @@ internal class ModelManagerModelLocatorLocalDataSource @Inject constructor(
             config.transcriptionModelFileName.trim().takeIf { it.isNotEmpty() }
                 ?: ProcessingConfig().transcriptionModelFileName,
         )
-
-        ModelId.Whisper -> {
-            val base = listOf("ggml-base-q5_1.bin", "ggml-base.en-q5_1.bin", "ggml-base.en.bin", "ggml-base.bin")
-            val small = listOf("ggml-small-q5_1.bin", "ggml-small.en-q5_1.bin", "ggml-small.en.bin", "ggml-small.bin")
-            when (config.whisperModelSize) {
-                WhisperModelSize.Base -> base + small
-                WhisperModelSize.Small -> small + base
-            }
-        }
 
         ModelId.Llm -> listOf(
             config.llmModelFileName.trim().takeIf { it.isNotEmpty() }
