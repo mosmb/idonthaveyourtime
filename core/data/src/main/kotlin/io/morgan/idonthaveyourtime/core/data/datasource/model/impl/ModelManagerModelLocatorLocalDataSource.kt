@@ -3,6 +3,7 @@ package io.morgan.idonthaveyourtime.core.data.datasource.model.impl
 import io.morgan.idonthaveyourtime.core.data.datasource.model.ModelLocatorLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.model.ModelStoreLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.datasource.settings.ProcessingConfigLocalDataSource
+import io.morgan.idonthaveyourtime.core.data.datasource.settings.impl.normalizeTranscriptionModelFileName
 import io.morgan.idonthaveyourtime.core.model.ModelAvailability
 import io.morgan.idonthaveyourtime.core.model.ModelId
 import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
@@ -89,8 +90,7 @@ internal class ModelManagerModelLocatorLocalDataSource @Inject constructor(
         config: ProcessingConfig,
     ): List<String> = when (modelId) {
         ModelId.Transcription -> listOf(
-            config.transcriptionModelFileName.trim().takeIf { it.isNotEmpty() }
-                ?: ProcessingConfig().transcriptionModelFileName,
+            normalizeTranscriptionModelFileName(config.transcriptionModelFileName),
         )
 
         ModelId.Llm -> listOf(

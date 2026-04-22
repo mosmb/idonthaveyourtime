@@ -12,6 +12,7 @@ import io.morgan.idonthaveyourtime.core.data.datasource.settings.ProcessingConfi
 import io.morgan.idonthaveyourtime.core.data.di.IoDispatcher
 import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
 import io.morgan.idonthaveyourtime.core.model.SummarizerRuntime
+import io.morgan.idonthaveyourtime.core.model.TranscriptionModelFormat
 import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -58,9 +59,7 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
             ?: ProcessingConfig().transcriptionRuntime
 
         val transcriptionModelFileName = get(KEY_TRANSCRIPTION_MODEL_FILE_NAME)
-            ?.trim()
-            ?.takeIf { it.isNotEmpty() }
-            ?: ProcessingConfig().transcriptionModelFileName
+            .let(::normalizeTranscriptionModelFileName)
 
         val llmModelFileName = get(KEY_LLM_MODEL_FILE_NAME)
             ?.trim()
@@ -94,5 +93,17 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
         val KEY_SEGMENT_TARGET_MS = longPreferencesKey("segment_target_ms")
         val KEY_SEGMENT_OVERLAP_MS = longPreferencesKey("segment_overlap_ms")
         val KEY_MAP_EVERY_SEGMENTS = intPreferencesKey("map_every_segments")
+    }
+}
+
+internal fun normalizeTranscriptionModelFileName(fileName: String?): String {
+    val normalizedFileName = fileName
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: return ProcessingConfig().transcriptionModelFileName
+
+    return when (TranscriptionModelFormat.fromFileName(normalizedFileName)) {
+        TranscriptionModelFormat.LiteRtLm -> normalizedFileName
+        null -> ProcessingConfig().transcriptionModelFileName
     }
 }
