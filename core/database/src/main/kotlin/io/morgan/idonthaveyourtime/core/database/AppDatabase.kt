@@ -15,7 +15,7 @@ import io.morgan.idonthaveyourtime.core.database.model.TranscriptSegmentEntity
         TranscriptSegmentEntity::class,
         ChunkSummaryEntity::class,
     ],
-    version = 3,
+    version = 1,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {

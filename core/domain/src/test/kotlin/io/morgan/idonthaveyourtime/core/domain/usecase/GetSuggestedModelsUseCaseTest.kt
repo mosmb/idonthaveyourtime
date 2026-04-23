@@ -12,16 +12,18 @@ class GetSuggestedModelsUseCaseTest {
     private val useCase = GetSuggestedModelsUseCase()
 
     @Test
-    fun `model ids do not expose whisper`() {
-        assertThat(ModelId.entries.map { it.name }).doesNotContain("Whisper")
+    fun `model ids only include transcription and llm`() {
+        assertThat(ModelId.entries)
+            .containsExactly(ModelId.Transcription, ModelId.Llm)
+            .inOrder()
     }
 
     @Test
-    fun `suggested models never include whisper artifacts`() {
+    fun `suggested models only use supported file extensions`() {
         val suggestions = ModelId.entries.flatMap { modelId -> useCase(modelId) }
 
-        assertThat(suggestions.map { it.huggingFaceRepoId }).doesNotContain("ggerganov/whisper.cpp")
-        assertThat(suggestions.any { suggested -> suggested.fileName.trim().lowercase().endsWith(".bin") }).isFalse()
+        assertThat(suggestions.map { suggested -> suggested.fileName.substringAfterLast('.') }.toSet())
+            .containsExactly("litertlm", "task")
     }
 
     @Test
@@ -33,16 +35,22 @@ class GetSuggestedModelsUseCaseTest {
     }
 
     @Test
-    fun `summarizer contracts do not expose llama or gguf`() {
-        assertThat(SummarizerRuntime.entries.map { it.name }).doesNotContain("LlamaCpp")
-        assertThat(SummarizerModelFormat.entries.map { it.name }).doesNotContain("Gguf")
+    fun `summarizer contracts only expose supported runtimes and formats`() {
+        assertThat(SummarizerRuntime.entries)
+            .containsExactly(SummarizerRuntime.LiteRtLm, SummarizerRuntime.MediaPipeLlmInference)
+            .inOrder()
+        assertThat(SummarizerModelFormat.entries.map { it.fileExtension })
+            .containsExactly("litertlm", "task")
+            .inOrder()
     }
 
     @Test
-    fun `suggested LLM models never include gguf artifacts`() {
+    fun `suggested llm models only use supported formats`() {
         val suggestions = useCase(ModelId.Llm)
 
-        assertThat(suggestions.any { it.fileName.trim().lowercase().endsWith(".gguf") }).isFalse()
-        assertThat(suggestions.any { it.summarizerModelFormat?.fileExtension == "gguf" }).isFalse()
+        assertThat(suggestions.mapNotNull { it.summarizerModelFormat?.fileExtension }.toSet())
+            .containsExactly("litertlm", "task")
+        assertThat(suggestions.map { it.fileName.substringAfterLast('.') }.toSet())
+            .containsExactly("litertlm", "task")
     }
 }

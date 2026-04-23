@@ -108,11 +108,11 @@ class RoomSessionRepositoryTest {
     }
 
     @Test
-    fun `legacy whisper transcription diagnostics rows stay null`() = runTest {
+    fun `legacy transcription diagnostics rows with unknown runtime stay null`() = runTest {
         val sessionDao = FakeSessionDao()
         sessionDao.upsert(
             SessionEntity(
-                id = "legacy-whisper",
+                id = "legacy-runtime",
                 createdAtEpochMs = 1L,
                 sourceName = "voice.ogg",
                 mimeType = "audio/ogg",
@@ -124,9 +124,9 @@ class RoomSessionRepositoryTest {
                 languageCode = "en",
                 errorCode = null,
                 errorMessage = null,
-                transcriptionRuntime = "WhisperCpp",
+                transcriptionRuntime = "LegacyRuntime",
                 transcriptionBackendName = null,
-                transcriptionModelFileName = "ggml-base-q5_1.bin",
+                transcriptionModelFileName = "legacy.invalid",
                 transcriptionWarmStart = true,
                 transcriptionModelLoadMs = 42L,
                 transcriptionFirstTextMs = 21L,
@@ -142,7 +142,7 @@ class RoomSessionRepositoryTest {
         )
         val repository = RoomSessionRepository(sessionDao, FakeTranscriptSegmentDao(), FakeChunkSummaryDao())
 
-        val saved = repository.getSession("legacy-whisper")
+        val saved = repository.getSession("legacy-runtime")
 
         assertThat(saved?.transcriptionDiagnostics).isNull()
     }

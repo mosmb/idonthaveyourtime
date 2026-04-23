@@ -141,7 +141,7 @@ class RoutingSummarizerEngineLocalDataSourceTest {
     fun `probe rejects unsupported model extensions`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
-                llmModelFileName = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
+                llmModelFileName = "summary.invalid",
             ),
         )
 

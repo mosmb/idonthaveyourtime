@@ -38,7 +38,7 @@ class SummarizerEngineCapabilityTest {
 
     @Test
     fun `LiteRT-LM probe rejects non litertlm models`() = runTest {
-        val probe = liteRtLmEngine("summary.gguf").probe().getOrThrow()
+        val probe = liteRtLmEngine("summary.invalid").probe().getOrThrow()
 
         assertFalse(probe.supported)
         assertNull(probe.modelFormat)
@@ -65,7 +65,7 @@ class SummarizerEngineCapabilityTest {
 
     @Test
     fun `MediaPipe probe rejects non task models`() = runTest {
-        val probe = mediaPipeEngine("summary.gguf").probe().getOrThrow()
+        val probe = mediaPipeEngine("summary.invalid").probe().getOrThrow()
 
         assertFalse(probe.supported)
         assertNull(probe.modelFormat)

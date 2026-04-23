@@ -2,8 +2,6 @@ package io.morgan.idonthaveyourtime.core.data.di
 
 import android.content.Context
 import androidx.room.Room
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -130,52 +128,6 @@ object DatabaseModule {
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, "processing.db")
-            .addMigrations(
-                object : Migration(1, 2) {
-                    override fun migrate(db: SupportSQLiteDatabase) {
-                        db.execSQL(
-                            """
-                            CREATE TABLE IF NOT EXISTS transcript_segments (
-                                session_id TEXT NOT NULL,
-                                segment_index INTEGER NOT NULL,
-                                start_ms INTEGER NOT NULL,
-                                end_ms INTEGER NOT NULL,
-                                text TEXT NOT NULL,
-                                PRIMARY KEY(session_id, segment_index)
-                            )
-                            """.trimIndent()
-                        )
-                        db.execSQL(
-                            """
-                            CREATE TABLE IF NOT EXISTS chunk_summaries (
-                                session_id TEXT NOT NULL,
-                                chunk_index INTEGER NOT NULL,
-                                start_ms INTEGER NOT NULL,
-                                end_ms INTEGER NOT NULL,
-                                bullets_text TEXT NOT NULL,
-                                PRIMARY KEY(session_id, chunk_index)
-                            )
-                            """.trimIndent()
-                        )
-                    }
-                },
-                object : Migration(2, 3) {
-                    override fun migrate(db: SupportSQLiteDatabase) {
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_runtime TEXT")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_backend_name TEXT")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_model_file_name TEXT")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_warm_start INTEGER")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_model_load_ms INTEGER")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_first_text_ms INTEGER")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_total_ms INTEGER")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_audio_duration_ms INTEGER")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_audio_seconds_per_wall_second REAL")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_fallback_reason TEXT")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_failure_reason TEXT")
-                        db.execSQL("ALTER TABLE processing_sessions ADD COLUMN transcription_device_label TEXT")
-                    }
-                }
-            )
             .build()
 
     @Provides
