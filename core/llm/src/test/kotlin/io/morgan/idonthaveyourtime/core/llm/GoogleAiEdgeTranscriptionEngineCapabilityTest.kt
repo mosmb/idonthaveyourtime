@@ -5,6 +5,7 @@ import io.morgan.idonthaveyourtime.core.data.datasource.audio.AudioSampleReaderL
 import io.morgan.idonthaveyourtime.core.data.datasource.model.ModelLocatorLocalDataSource
 import io.morgan.idonthaveyourtime.core.model.ModelAvailability
 import io.morgan.idonthaveyourtime.core.model.ModelId
+import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
 import io.morgan.idonthaveyourtime.core.model.TranscriptionModelFormat
 import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import kotlinx.coroutines.flow.Flow
@@ -16,6 +17,22 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GoogleAiEdgeTranscriptionEngineCapabilityTest {
+
+    @Test
+    fun `transcription runtime contracts do not expose auto`() {
+        assertTrue(TranscriptionRuntime.entries.none { runtime -> runtime.name == "Auto" })
+    }
+
+    @Test
+    fun `processing config does not expose runtime selection`() {
+        val fieldNames = ProcessingConfig::class.java.declaredFields.map { it.name }.toSet()
+
+        assertTrue(fieldNames.contains("transcriptionModelFileName"))
+        assertTrue(fieldNames.contains("llmModelFileName"))
+
+        assertTrue("transcriptionRuntime should be removed from ProcessingConfig", !fieldNames.contains("transcriptionRuntime"))
+        assertTrue("summarizerRuntime should be removed from ProcessingConfig", !fieldNames.contains("summarizerRuntime"))
+    }
 
     @Test
     fun `probe accepts litertlm transcription model`() = runTest {

@@ -55,16 +55,17 @@ private fun String.toProcessingStage(): ProcessingStage =
     ProcessingStage.entries.firstOrNull { it.name == this } ?: ProcessingStage.Error
 
 private fun SessionEntity.asTranscriptionDiagnostics(): SessionTranscriptionDiagnostics? {
-    val runtimeCompatibility = transcriptionRuntime
-        ?.let(::resolveLegacyCompatibleRuntime)
+    val runtime = transcriptionRuntime
+        ?.takeIf { rawRuntime -> rawRuntime == TranscriptionRuntime.GoogleAiEdgeLiteRtLm.name }
+        ?.let { TranscriptionRuntime.GoogleAiEdgeLiteRtLm }
         ?: return null
     val warmStart = transcriptionWarmStart ?: return null
     val totalMs = transcriptionTotalMs ?: return null
     val audioDurationMs = transcriptionAudioDurationMs ?: return null
 
     return SessionTranscriptionDiagnostics(
-        runtime = runtimeCompatibility.runtime,
-        backendName = transcriptionBackendName ?: runtimeCompatibility.backendName,
+        runtime = runtime,
+        backendName = transcriptionBackendName,
         modelFileName = transcriptionModelFileName,
         warmStart = warmStart,
         modelLoadMs = transcriptionModelLoadMs,
@@ -77,28 +78,3 @@ private fun SessionEntity.asTranscriptionDiagnostics(): SessionTranscriptionDiag
         deviceLabel = transcriptionDeviceLabel,
     )
 }
-
-private fun resolveLegacyCompatibleRuntime(rawRuntime: String): RuntimeCompatibility? =
-    when (rawRuntime) {
-        LEGACY_WHISPER_RUNTIME -> RuntimeCompatibility(
-            runtime = TranscriptionRuntime.Auto,
-            backendName = LEGACY_WHISPER_BACKEND_NAME,
-        )
-
-        else -> runCatching { TranscriptionRuntime.valueOf(rawRuntime) }
-            .getOrNull()
-            ?.let { runtime ->
-                RuntimeCompatibility(
-                    runtime = runtime,
-                    backendName = null,
-                )
-            }
-    }
-
-private data class RuntimeCompatibility(
-    val runtime: TranscriptionRuntime,
-    val backendName: String?,
-)
-
-private const val LEGACY_WHISPER_RUNTIME = "WhisperCpp"
-private const val LEGACY_WHISPER_BACKEND_NAME = "whisper.cpp (legacy)"

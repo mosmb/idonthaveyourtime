@@ -38,10 +38,10 @@ class SummarizerEngineCapabilityTest {
 
     @Test
     fun `LiteRT-LM probe rejects non litertlm models`() = runTest {
-        val probe = liteRtLmEngine("summary.gguf").probe().getOrThrow()
+        val probe = liteRtLmEngine("summary.invalid").probe().getOrThrow()
 
         assertFalse(probe.supported)
-        assertEquals(SummarizerModelFormat.Gguf, probe.modelFormat)
+        assertNull(probe.modelFormat)
         assertEquals("LiteRT-LM requires a `.litertlm` model.", probe.failureReason)
     }
 
@@ -65,38 +65,11 @@ class SummarizerEngineCapabilityTest {
 
     @Test
     fun `MediaPipe probe rejects non task models`() = runTest {
-        val probe = mediaPipeEngine("summary.litertlm").probe().getOrThrow()
+        val probe = mediaPipeEngine("summary.invalid").probe().getOrThrow()
 
         assertFalse(probe.supported)
-        assertEquals(SummarizerModelFormat.LiteRtLm, probe.modelFormat)
+        assertNull(probe.modelFormat)
         assertEquals("MediaPipe LLM Inference requires a `.task` model.", probe.failureReason)
-    }
-
-    @Test
-    fun `llama cpp capability and probe match gguf contract`() = runTest {
-        val engine = llamaEngine("Qwen2.5-0.5B-Instruct-Q4_K_M.gguf")
-
-        val capability = engine.capability()
-        val probe = engine.probe().getOrThrow()
-
-        assertEquals(SummarizerRuntime.LlamaCpp, capability.runtime)
-        assertEquals(setOf(SummarizerModelFormat.Gguf), capability.supportedFormats)
-        assertFalse(capability.supportsStreaming)
-        assertFalse(capability.supportsAsyncGeneration)
-        assertFalse(capability.supportsHardwareAcceleration)
-        assertTrue(probe.supported)
-        assertEquals(SummarizerRuntime.LlamaCpp, probe.selectedRuntime)
-        assertEquals(SummarizerModelFormat.Gguf, probe.modelFormat)
-        assertNull(probe.failureReason)
-    }
-
-    @Test
-    fun `llama cpp probe rejects non gguf models`() = runTest {
-        val probe = llamaEngine("summary.task").probe().getOrThrow()
-
-        assertFalse(probe.supported)
-        assertEquals(SummarizerModelFormat.Task, probe.modelFormat)
-        assertEquals("llama.cpp requires a `.gguf` model.", probe.failureReason)
     }
 
     private fun liteRtLmEngine(modelFileName: String): LiteRtLmSummarizerEngineLocalDataSource =
@@ -109,12 +82,6 @@ class SummarizerEngineCapabilityTest {
     private fun mediaPipeEngine(modelFileName: String): MediaPipeLlmInferenceSummarizerEngineLocalDataSource =
         MediaPipeLlmInferenceSummarizerEngineLocalDataSource(
             context = ContextWrapper(null),
-            modelLocator = FakeModelLocatorLocalDataSource(modelFileName),
-            defaultDispatcher = StandardTestDispatcher(),
-        )
-
-    private fun llamaEngine(modelFileName: String): LlamaCppSummarizerEngineLocalDataSource =
-        LlamaCppSummarizerEngineLocalDataSource(
             modelLocator = FakeModelLocatorLocalDataSource(modelFileName),
             defaultDispatcher = StandardTestDispatcher(),
         )

@@ -12,10 +12,6 @@ enum class SummarizerModelFormat(
         displayName = "MediaPipe (.task)",
         fileExtension = "task",
     ),
-    Gguf(
-        displayName = "GGUF (.gguf)",
-        fileExtension = "gguf",
-    ),
     ;
 
     companion object {

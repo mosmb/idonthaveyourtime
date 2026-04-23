@@ -67,7 +67,7 @@ android {
     }
 
     androidResources {
-        noCompress += setOf("gguf", "litertlm", "task")
+        noCompress += setOf("litertlm", "task")
     }
 }
 

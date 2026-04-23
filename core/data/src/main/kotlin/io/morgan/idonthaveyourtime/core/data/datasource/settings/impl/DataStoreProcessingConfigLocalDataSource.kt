@@ -11,9 +11,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import io.morgan.idonthaveyourtime.core.data.datasource.settings.ProcessingConfigLocalDataSource
 import io.morgan.idonthaveyourtime.core.data.di.IoDispatcher
 import io.morgan.idonthaveyourtime.core.model.ProcessingConfig
-import io.morgan.idonthaveyourtime.core.model.SummarizerRuntime
 import io.morgan.idonthaveyourtime.core.model.TranscriptionModelFormat
-import io.morgan.idonthaveyourtime.core.model.TranscriptionRuntime
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
@@ -41,10 +39,8 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
     override suspend fun setConfig(config: ProcessingConfig): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             context.processingConfigDataStore.edit { preferences ->
-                preferences[KEY_TRANSCRIPTION_RUNTIME] = config.transcriptionRuntime.name
                 preferences[KEY_TRANSCRIPTION_MODEL_FILE_NAME] = config.transcriptionModelFileName
                 preferences[KEY_LLM_MODEL_FILE_NAME] = config.llmModelFileName
-                preferences[KEY_SUMMARIZER_RUNTIME] = config.summarizerRuntime.name
                 preferences[KEY_SEGMENT_TARGET_MS] = config.segmentationTargetSpeechMs
                 preferences[KEY_SEGMENT_OVERLAP_MS] = config.segmentationOverlapMs
                 preferences[KEY_MAP_EVERY_SEGMENTS] = config.mapEverySegments
@@ -54,10 +50,6 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
     }
 
     private fun Preferences.toProcessingConfig(): ProcessingConfig {
-        val transcriptionRuntime = get(KEY_TRANSCRIPTION_RUNTIME)
-            ?.let { raw -> runCatching { TranscriptionRuntime.valueOf(raw) }.getOrNull() }
-            ?: ProcessingConfig().transcriptionRuntime
-
         val transcriptionModelFileName = get(KEY_TRANSCRIPTION_MODEL_FILE_NAME)
             .let(::normalizeTranscriptionModelFileName)
 
@@ -66,19 +58,13 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
             ?.takeIf { it.isNotEmpty() }
             ?: ProcessingConfig().llmModelFileName
 
-        val summarizerRuntime = get(KEY_SUMMARIZER_RUNTIME)
-            ?.let { raw -> runCatching { SummarizerRuntime.valueOf(raw) }.getOrNull() }
-            ?: ProcessingConfig().summarizerRuntime
-
         val targetMs = get(KEY_SEGMENT_TARGET_MS) ?: ProcessingConfig().segmentationTargetSpeechMs
         val overlapMs = get(KEY_SEGMENT_OVERLAP_MS) ?: ProcessingConfig().segmentationOverlapMs
         val mapEvery = get(KEY_MAP_EVERY_SEGMENTS) ?: ProcessingConfig().mapEverySegments
 
         return ProcessingConfig(
-            transcriptionRuntime = transcriptionRuntime,
             transcriptionModelFileName = transcriptionModelFileName,
             llmModelFileName = llmModelFileName,
-            summarizerRuntime = summarizerRuntime,
             segmentationTargetSpeechMs = targetMs,
             segmentationOverlapMs = overlapMs,
             mapEverySegments = mapEvery,
@@ -86,10 +72,8 @@ internal class DataStoreProcessingConfigLocalDataSource @Inject constructor(
     }
 
     private companion object {
-        val KEY_TRANSCRIPTION_RUNTIME = stringPreferencesKey("transcription_runtime")
         val KEY_TRANSCRIPTION_MODEL_FILE_NAME = stringPreferencesKey("transcription_model_file_name")
         val KEY_LLM_MODEL_FILE_NAME = stringPreferencesKey("llm_model_file_name")
-        val KEY_SUMMARIZER_RUNTIME = stringPreferencesKey("summarizer_runtime")
         val KEY_SEGMENT_TARGET_MS = longPreferencesKey("segment_target_ms")
         val KEY_SEGMENT_OVERLAP_MS = longPreferencesKey("segment_overlap_ms")
         val KEY_MAP_EVERY_SEGMENTS = intPreferencesKey("map_every_segments")

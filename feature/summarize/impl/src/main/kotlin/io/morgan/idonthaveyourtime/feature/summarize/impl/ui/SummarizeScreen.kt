@@ -730,20 +730,6 @@ private fun SettingsSheetContent(
                 )
             }
 
-            IdntText(text = stringResource(R.string.transcription_runtime_title), style = IdntTheme.typography.titleM)
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                TranscriptionRuntime.entries.forEach { runtime ->
-                    IdntChoiceChip(
-                        text = runtime.displayName,
-                        selected = config.transcriptionRuntime == runtime,
-                        onClick = { onConfigChanged(config.copy(transcriptionRuntime = runtime)) },
-                    )
-                }
-            }
-
             IdntText(text = stringResource(R.string.transcription_model), style = IdntTheme.typography.titleM)
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 state.transcriptionSuggestedModels.forEach { model ->
@@ -752,20 +738,6 @@ private fun SettingsSheetContent(
                         label = model.displayName,
                         description = suggestedModelDescription(model),
                         onClick = { onConfigChanged(config.copy(transcriptionModelFileName = model.fileName)) },
-                    )
-                }
-            }
-
-            IdntText(text = stringResource(R.string.runtime_title), style = IdntTheme.typography.titleM)
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                SummarizerRuntime.entries.forEach { runtime ->
-                    IdntChoiceChip(
-                        text = runtime.displayName,
-                        selected = config.summarizerRuntime == runtime,
-                        onClick = { onConfigChanged(config.copy(summarizerRuntime = runtime)) },
                     )
                 }
             }
@@ -1094,7 +1066,6 @@ private fun previewUiState(): SummarizeUiState {
             description = "Larger LiteRT-LM model",
             huggingFaceRepoId = "litert-community/gemma-4-E4B-it-litert-lm",
             fileName = "gemma-4-E4B-it.litertlm",
-            summarizerRuntime = SummarizerRuntime.LiteRtLm,
             summarizerModelFormat = SummarizerModelFormat.LiteRtLm,
         ),
         SuggestedModel(
@@ -1103,7 +1074,6 @@ private fun previewUiState(): SummarizeUiState {
             description = "Preferred LiteRT-LM path",
             huggingFaceRepoId = "litert-community/gemma-4-E2B-it-litert-lm",
             fileName = "gemma-4-E2B-it.litertlm",
-            summarizerRuntime = SummarizerRuntime.LiteRtLm,
             summarizerModelFormat = SummarizerModelFormat.LiteRtLm,
         ),
         SuggestedModel(
@@ -1112,7 +1082,6 @@ private fun previewUiState(): SummarizeUiState {
             description = "MediaPipe `.task` sample",
             huggingFaceRepoId = "diamondbelema/edu-hive-llm-models",
             fileName = "Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
-            summarizerRuntime = SummarizerRuntime.MediaPipeLlmInference,
             summarizerModelFormat = SummarizerModelFormat.Task,
         ),
     )
@@ -1205,13 +1174,9 @@ private suspend fun importModelFile(
 
 private fun suggestedModelDescription(model: SuggestedModel): String = buildString {
     append(model.description)
-    model.transcriptionRuntime?.let { runtime ->
+    model.transcriptionModelFormat?.let { format ->
         append(" • ")
-        append(runtime.displayName)
-    }
-    model.summarizerRuntime?.let { runtime ->
-        append(" • ")
-        append(runtime.displayName)
+        append(format.displayName)
     }
     model.summarizerModelFormat?.let { format ->
         append(" • ")
@@ -1246,30 +1211,27 @@ private fun transcriptionStatusLabel(
     return configuredTranscriptionLabel(config)
 }
 
-private fun configuredTranscriptionLabel(config: ProcessingConfig): String {
+internal fun configuredTranscriptionLabel(config: ProcessingConfig): String {
     val modelLabel = config.transcriptionModelFileName.trim()
         .substringAfterLast('/')
         .ifBlank { "unconfigured model" }
 
-    return when (config.transcriptionRuntime) {
-        TranscriptionRuntime.Auto -> "Transcription: Auto • $modelLabel"
-        else -> "Transcription: ${config.transcriptionRuntime.displayName} • $modelLabel"
+    val runtimeLabel = when (TranscriptionModelFormat.fromFileName(config.transcriptionModelFileName)) {
+        TranscriptionModelFormat.LiteRtLm -> TranscriptionRuntime.GoogleAiEdgeLiteRtLm.displayName
+        null -> "Unconfigured"
     }
+
+    return "Transcription: $runtimeLabel • $modelLabel"
 }
 
 private fun configuredSummarizerLabel(config: ProcessingConfig): String {
-    val format = SummarizerModelFormat.fromFileName(config.llmModelFileName)
-    val autoRuntime = when (format) {
-        SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm
-        SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference
-        SummarizerModelFormat.Gguf -> SummarizerRuntime.LlamaCpp
-        null -> null
+    val modelLabel = config.llmModelFileName.trim()
+        .substringAfterLast('/')
+        .ifBlank { "unconfigured model" }
+    val runtimeLabel = when (SummarizerModelFormat.fromFileName(config.llmModelFileName)) {
+        SummarizerModelFormat.LiteRtLm -> SummarizerRuntime.LiteRtLm.displayName
+        SummarizerModelFormat.Task -> SummarizerRuntime.MediaPipeLlmInference.displayName
+        null -> "Unconfigured"
     }
-
-    return when {
-        config.summarizerRuntime == SummarizerRuntime.Auto && autoRuntime != null ->
-            "Summarizer: Auto -> ${autoRuntime.displayName}"
-
-        else -> "Summarizer: ${config.summarizerRuntime.displayName}"
-    }
+    return "Summarizer: $runtimeLabel • $modelLabel"
 }

@@ -17,54 +17,154 @@ import org.junit.Test
 class RoutingSummarizerEngineLocalDataSourceTest {
 
     @Test
-    fun `probe auto selects LiteRT-LM for litertlm models`() = runTest {
+    fun `summarizer runtime contracts do not expose auto`() {
+        assertThat(SummarizerRuntime.entries.map { it.name }).doesNotContain("Auto")
+    }
+
+    @Test
+    fun `router capability does not claim a single runtime`() {
+        val configDataSource = FakeProcessingConfigLocalDataSource(ProcessingConfig())
+
+        val selector = RoutingSummarizerEngineLocalDataSource(
+            processingConfigDataSource = configDataSource,
+            liteRtLmEngine = FakeSummarizerEngine(
+                processingConfigDataSource = configDataSource,
+                runtime = SummarizerRuntime.LiteRtLm,
+                supportedFormats = setOf(SummarizerModelFormat.LiteRtLm),
+            ),
+            mediaPipeEngine = FakeSummarizerEngine(
+                processingConfigDataSource = configDataSource,
+                runtime = SummarizerRuntime.MediaPipeLlmInference,
+                supportedFormats = setOf(SummarizerModelFormat.Task),
+            ),
+        )
+
+        val capability = selector.capability()
+
+        assertThat(capability.runtime).isNull()
+        assertThat(capability.supportedFormats)
+            .containsExactly(SummarizerModelFormat.LiteRtLm, SummarizerModelFormat.Task)
+    }
+
+    @Test
+    fun `probe selects LiteRT-LM for litertlm models even if MediaPipe engine claims it supports LiteRT-LM`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
                 llmModelFileName = "gemma-4-E2B-it.litertlm",
-                summarizerRuntime = SummarizerRuntime.Auto,
             ),
         )
 
         val selector = RoutingSummarizerEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(
-                FakeSummarizerEngine(configDataSource, SummarizerRuntime.LiteRtLm, setOf(SummarizerModelFormat.LiteRtLm)),
-                FakeSummarizerEngine(configDataSource, SummarizerRuntime.MediaPipeLlmInference, setOf(SummarizerModelFormat.Task)),
-                FakeSummarizerEngine(configDataSource, SummarizerRuntime.LlamaCpp, setOf(SummarizerModelFormat.Gguf)),
+            liteRtLmEngine = FakeSummarizerEngine(
+                processingConfigDataSource = configDataSource,
+                runtime = SummarizerRuntime.LiteRtLm,
+                supportedFormats = setOf(SummarizerModelFormat.LiteRtLm),
+            ),
+            mediaPipeEngine = FakeSummarizerEngine(
+                processingConfigDataSource = configDataSource,
+                runtime = SummarizerRuntime.MediaPipeLlmInference,
+                supportedFormats = setOf(SummarizerModelFormat.LiteRtLm, SummarizerModelFormat.Task),
             ),
         )
 
         val probe = selector.probe().getOrThrow()
 
         assertThat(probe.supported).isTrue()
+        assertThat(probe.requestedRuntime).isEqualTo(SummarizerRuntime.LiteRtLm)
+        assertThat(probe.selectedRuntime).isEqualTo(SummarizerRuntime.LiteRtLm)
+        assertThat(probe.modelFormat).isEqualTo(SummarizerModelFormat.LiteRtLm)
+    }
+
+    @Test
+    fun `probe selects MediaPipe for task models even if LiteRT-LM engine claims it supports task`() = runTest {
+        val configDataSource = FakeProcessingConfigLocalDataSource(
+            ProcessingConfig(
+                llmModelFileName = "Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
+            ),
+        )
+
+        val selector = RoutingSummarizerEngineLocalDataSource(
+            processingConfigDataSource = configDataSource,
+            liteRtLmEngine = FakeSummarizerEngine(
+                processingConfigDataSource = configDataSource,
+                runtime = SummarizerRuntime.LiteRtLm,
+                supportedFormats = setOf(SummarizerModelFormat.LiteRtLm, SummarizerModelFormat.Task),
+            ),
+            mediaPipeEngine = FakeSummarizerEngine(
+                processingConfigDataSource = configDataSource,
+                runtime = SummarizerRuntime.MediaPipeLlmInference,
+                supportedFormats = setOf(SummarizerModelFormat.Task),
+            ),
+        )
+
+        val probe = selector.probe().getOrThrow()
+
+        assertThat(probe.supported).isTrue()
+        assertThat(probe.requestedRuntime).isEqualTo(SummarizerRuntime.MediaPipeLlmInference)
+        assertThat(probe.selectedRuntime).isEqualTo(SummarizerRuntime.MediaPipeLlmInference)
+        assertThat(probe.modelFormat).isEqualTo(SummarizerModelFormat.Task)
+    }
+
+    @Test
+    fun `probe selects LiteRT-LM for litertlm models`() = runTest {
+        val configDataSource = FakeProcessingConfigLocalDataSource(
+            ProcessingConfig(
+                llmModelFileName = "gemma-4-E2B-it.litertlm",
+            ),
+        )
+
+        val selector = RoutingSummarizerEngineLocalDataSource(
+            processingConfigDataSource = configDataSource,
+            liteRtLmEngine = FakeSummarizerEngine(
+                configDataSource,
+                SummarizerRuntime.LiteRtLm,
+                setOf(SummarizerModelFormat.LiteRtLm),
+            ),
+            mediaPipeEngine = FakeSummarizerEngine(
+                configDataSource,
+                SummarizerRuntime.MediaPipeLlmInference,
+                setOf(SummarizerModelFormat.Task),
+            ),
+        )
+
+        val probe = selector.probe().getOrThrow()
+
+        assertThat(probe.supported).isTrue()
+        assertThat(probe.requestedRuntime).isEqualTo(SummarizerRuntime.LiteRtLm)
         assertThat(probe.selectedRuntime).isEqualTo(SummarizerRuntime.LiteRtLm)
         assertThat(probe.modelFormat).isEqualTo(SummarizerModelFormat.LiteRtLm)
         assertThat(probe.fallbackReason).isNull()
     }
 
     @Test
-    fun `probe explicit MediaPipe falls back to llama for gguf models`() = runTest {
+    fun `probe rejects unsupported model extensions`() = runTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
-                llmModelFileName = "Qwen2.5-0.5B-Instruct-Q4_K_M.gguf",
-                summarizerRuntime = SummarizerRuntime.MediaPipeLlmInference,
+                llmModelFileName = "summary.invalid",
             ),
         )
 
         val selector = RoutingSummarizerEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(
-                FakeSummarizerEngine(configDataSource, SummarizerRuntime.LiteRtLm, setOf(SummarizerModelFormat.LiteRtLm)),
-                FakeSummarizerEngine(configDataSource, SummarizerRuntime.MediaPipeLlmInference, setOf(SummarizerModelFormat.Task)),
-                FakeSummarizerEngine(configDataSource, SummarizerRuntime.LlamaCpp, setOf(SummarizerModelFormat.Gguf)),
+            liteRtLmEngine = FakeSummarizerEngine(
+                configDataSource,
+                SummarizerRuntime.LiteRtLm,
+                setOf(SummarizerModelFormat.LiteRtLm),
+            ),
+            mediaPipeEngine = FakeSummarizerEngine(
+                configDataSource,
+                SummarizerRuntime.MediaPipeLlmInference,
+                setOf(SummarizerModelFormat.Task),
             ),
         )
 
         val probe = selector.probe().getOrThrow()
 
-        assertThat(probe.supported).isTrue()
-        assertThat(probe.selectedRuntime).isEqualTo(SummarizerRuntime.LlamaCpp)
-        assertThat(probe.fallbackReason).contains("Requested MediaPipe LLM Inference")
+        assertThat(probe.supported).isFalse()
+        assertThat(probe.selectedRuntime).isNull()
+        assertThat(probe.modelFormat).isNull()
+        assertThat(probe.failureReason).contains("Unsupported summarizer model format")
     }
 
     @Test
@@ -72,7 +172,6 @@ class RoutingSummarizerEngineLocalDataSourceTest {
         val configDataSource = FakeProcessingConfigLocalDataSource(
             ProcessingConfig(
                 llmModelFileName = "Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task",
-                summarizerRuntime = SummarizerRuntime.Auto,
             ),
         )
         val liteRt = FakeSummarizerEngine(
@@ -85,15 +184,11 @@ class RoutingSummarizerEngineLocalDataSourceTest {
             runtime = SummarizerRuntime.MediaPipeLlmInference,
             supportedFormats = setOf(SummarizerModelFormat.Task),
         )
-        val llama = FakeSummarizerEngine(
-            processingConfigDataSource = configDataSource,
-            runtime = SummarizerRuntime.LlamaCpp,
-            supportedFormats = setOf(SummarizerModelFormat.Gguf),
-        )
 
         val selector = RoutingSummarizerEngineLocalDataSource(
             processingConfigDataSource = configDataSource,
-            engines = setOf(liteRt, mediaPipe, llama),
+            liteRtLmEngine = liteRt,
+            mediaPipeEngine = mediaPipe,
         )
 
         val result = selector.mapChunk(
@@ -104,7 +199,6 @@ class RoutingSummarizerEngineLocalDataSourceTest {
         assertThat(result).isEqualTo("MediaPipe LLM Inference-map")
         assertThat(mediaPipe.mapCalls).isEqualTo(1)
         assertThat(liteRt.mapCalls).isEqualTo(0)
-        assertThat(llama.mapCalls).isEqualTo(0)
     }
 
     private class FakeProcessingConfigLocalDataSource(
@@ -133,9 +227,9 @@ class RoutingSummarizerEngineLocalDataSourceTest {
             SummarizerEngineCapability(
                 runtime = runtime,
                 supportedFormats = supportedFormats,
-                supportsStreaming = runtime != SummarizerRuntime.LlamaCpp,
-                supportsAsyncGeneration = runtime != SummarizerRuntime.LlamaCpp,
-                supportsHardwareAcceleration = runtime != SummarizerRuntime.LlamaCpp,
+                supportsStreaming = true,
+                supportsAsyncGeneration = true,
+                supportsHardwareAcceleration = true,
             )
 
         override suspend fun probe(): Result<SummarizerEngineProbeResult> = runCatching {
